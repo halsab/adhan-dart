@@ -74,13 +74,26 @@ new Codeberg repository has not been checked.
   discrepancies.
 - Run targeted unit tests in three host timezones, and on Chrome using
   dart2js and dart2wasm. Compile native executable, JS and Wasm examples.
-- Before stable release, inspect CI failures, run a follow-up full source
-  audit, and add direct numerical differential comparisons to pinned Swift
-  and Kotlin where their feature sets overlap. Disagreements must be
-  attributed to a documented policy or corrected. Independently regenerate
-  a broader JPL DE440/DE440s comparison for both Asr conventions and twilight,
-  including locations with no reachable solar angle. Compare performance
-  and numerical precision across native, JS and Wasm.
+- Direct Swift comparison: run the pinned Swift implementation on all 6,552
+  unrounded combinations (14 locations, 6 dates, 13 methods, 2 madhabs,
+  3 policy variants). Check valid/invalid schedules, night milestones and
+  Qibla; use a one-second limit on absolute instants.
+- Direct Kotlin comparison: restrict the same input matrix to the 1,296
+  common-feature scenarios at |latitude| <=40°, no polar substitution,
+  no elevation and no Tehran. The old solver and 0h-UT Asr declination
+  differ by design; limit differences to 90 seconds for Asr and 20 seconds
+  for other events and night milestones. These bounds reflect the older
+  model's known numerical limitations, not a relaxation of JS/Swift parity.
+- Independent JPL DE440s benchmark: 86 solar days, eight raw solar events
+  each, both Asr shadow ratios, polar unreachable events and two
+  near-culmination cases. Use Skyfield's apparent geocentric solar
+  coordinates, matching the geometric conventions, and independent bisection.
+  Limits: 10 seconds for |latitude| <55°, 30 seconds above; report actual
+  maximum and RMS per event and fail on unexplained reachability differences.
+- Before stable release, inspect all CI results and perform a follow-up audit.
+  Record observed results and verify the native, JS and Wasm execution paths.
+  Performance benchmarking is informative; it does not substitute for
+  correctness checks.
 - Stable release and VaqtPro integration are blocked until required
   verification is observed to pass. CI definitions and test code alone are
   not evidence of successful execution.
