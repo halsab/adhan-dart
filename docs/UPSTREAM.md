@@ -1,6 +1,6 @@
 # Upstream sources and verification contract
 
-Status: implementation draft, not a validated release.
+Status: version 3.0.0; all eight verification jobs passed for the runtime revision documented below.
 
 ## Pinned reference revisions
 
@@ -67,8 +67,8 @@ new Codeberg repository has not been checked.
   by v1 are retained as historical material and intentionally not used as
   ground truth. Updated fixtures must not be altered solely to make the port pass.
 - Astronomical worked examples and two DE440 near-culmination reference cases
-  transcribed from the upstream tests; these are independent numerical
-  reference values, not a newly executed ephemeris benchmark.
+  transcribed from the upstream tests, in addition to the separately executed
+  ephemeris benchmark below.
 - Global stress sweep: 37 latitudes * 37 longitudes * 365 days = 499,685.
   Require valid schedules outside the polar circle on this sampling grid,
   and strictly increasing returned events everywhere.
@@ -111,3 +111,20 @@ new Codeberg repository has not been checked.
 - Stable release and VaqtPro integration are blocked until required
   verification is observed to pass. CI definitions and test code alone are
   not evidence of successful execution.
+
+## Observed v3.0.0 verification
+
+Runtime revision: `bd60e47bb8d79e85287723090bdf159d3c8b386d`.
+[CI run 45702515101](https://github.com/halsab/adhan-dart/actions/runs/45702515101): all eight jobs completed successfully. Dart 3.14.1. Release metadata and documentation are updated separately without runtime changes.
+
+| Check | Observed result |
+| --- | --- |
+| Native analyzer, unit tests, global sweep (UTC, America/New_York, Pacific/Auckland) | Pass; 499,685 grid cases |
+| Browser JS and Wasm tests and compile checks | Pass |
+| Pinned JS | 8,190 scenarios; 55,860 event comparisons; 0 mismatches |
+| Unmodified Swift | 232 mismatches; extra next-day sunset dependency and subsecond truncation documented above |
+| Swift with isolated test-only sunrise dependency correction | 6,552 scenarios; 50,868 instant comparisons; 0 mismatches; maximum difference 1.317 s (including night milestones) |
+| Kotlin common-feature subset | 1,296 scenarios; 0 mismatches within specified older-algorithm bounds; maximum Asr difference 49 s |
+| Independent JPL DE440s | 88 solar days; 64 matching unreachable events; 0 mismatches outside specified bounds |
+
+JPL independently confirmed sunrise without sunset on 2025-04-17 at the polar boundary used by the Swift regression. Maximum observed raw-event error was 27.643 s for sunset near that boundary; the earlier 86-day sample maximum was 7.096 s. These are sampled results, not a guarantee for arbitrary dates or locations. The SDK lower bound is declared as Dart 3.10; the verified CI SDK was 3.14.1.

@@ -1,6 +1,6 @@
 name: adhan
 description: Offline, high-precision Islamic prayer times and Qibla in pure Dart.
-version: 3.0.0-dev.1
+version: 3.0.0
 homepage: https://github.com/halsab/adhan-dart
 repository: https://github.com/halsab/adhan-dart
 issue_tracker: https://github.com/halsab/adhan-dart/issues

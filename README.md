@@ -4,9 +4,9 @@ An offline prayer-time calculation library for Dart and Flutter. This fork is a
 pure Dart port of the current Adhan algorithms, with no runtime package
 dependencies, native bindings, network access, or device timezone dependency.
 
-**Development version.** The 3.0.0-dev.1 branch is not a production release.
-Passing CI, differential tests and review are required before tagging a stable
-release. See [upstream and verification notes](docs/UPSTREAM.md).
+**Version 3.0.0.** Distributed as a Git dependency. The runtime implementation
+passed all eight verification jobs on Dart 3.14.1. See the
+[verification report](docs/UPSTREAM.md#observed-v300-verification).
 
 ## Usage
 

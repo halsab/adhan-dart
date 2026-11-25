@@ -1,6 +1,6 @@
-## 3.0.0-dev.1
+## 3.0.0
 
-Development release; not yet validated.
+Breaking release, verified on Dart 3.14.1.
 
 - Port converged solar-angle solver, solar-transit Asr, date-line handling,
   horizon elevation, polar fallback and Shafaq.
@@ -9,7 +9,11 @@ Development release; not yet validated.
   calculation failures, night milestones and optional extended timeline.
 - Update SDK and dev dependencies; remove outdated Flutter sample.
 - Add published fixtures, global stress test, native/browser/Wasm CI and
-  pinned JS reference comparison. Verification must complete before release.
+  pinned JS, Swift and Kotlin reference comparisons and independent JPL DE440s
+  verification.
+- Handle political date-line civil dates with an explicit local-noon anchor.
+- Reject overlapping next-day intervals and expose polar substitutions.
+- Record verified results and upstream differences in docs/UPSTREAM.md.
 
 ## 2.0.0+1
 
