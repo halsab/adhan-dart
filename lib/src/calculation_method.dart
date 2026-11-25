@@ -1,4 +1,5 @@
 import 'calculation_parameters.dart';
+import 'calculation_options.dart';
 import 'prayer_adjustments.dart';
 
 /// Standard calculation methods for calculating prayer times
@@ -122,7 +123,7 @@ extension CalculationMethodExtensions on CalculationMethod {
       case CalculationMethod.singapore:
         {
           return CalculationParameters(
-                  fajrAngle: 20.0, ishaAngle: 18.0, method: this)
+                  fajrAngle: 20.0, ishaAngle: 18.0, method: this, rounding: Rounding.up)
               .withMethodAdjustments(PrayerAdjustments(
                   fajr: 0, sunrise: 0, dhuhr: 1, asr: 0, maghrib: 0, isha: 0));
         }
@@ -146,10 +147,6 @@ extension CalculationMethodExtensions on CalculationMethod {
         {
           return CalculationParameters(
               fajrAngle: 0.0, ishaAngle: 0.0, method: this);
-        }
-      default:
-        {
-          throw FormatException('Invalid CalculationMethod');
         }
     }
   }

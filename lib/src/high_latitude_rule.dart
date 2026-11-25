@@ -1,14 +1,15 @@
-/// Rules for dealing with Fajr and Isha at places with high latitudes
+import 'coordinates.dart';
+
+/// Approximations for Fajr and Isha at high latitudes.
 enum HighLatitudeRule {
-  /// Fajr will never be earlier than the middle of the night, and Isha will never be later than
-  /// the middle of the night.
   middle_of_the_night,
-
-  /// Fajr will never be earlier than the beginning of the last seventh of the night, and Isha will
-  /// never be later than the end of hte first seventh of the night.
   seventh_of_the_night,
+  twilight_angle,
+  /// Choose the recommended rule using the calculation latitude.
+  automatic;
 
-  /// Similar to [HighLatitudeRule.seventh_of_the_night], but instead of 1/7th, the faction
-  /// of the night used is fajrAngle / 60 and ishaAngle/60.
-  twilight_angle
+  static HighLatitudeRule recommendedFor(Coordinates coordinates) =>
+      coordinates.latitude.abs() > 48
+          ? seventh_of_the_night
+          : middle_of_the_night;
 }
