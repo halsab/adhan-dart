@@ -1,28 +1,151 @@
-name: tests
+name: Dart verification
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  native:
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        timezone: [UTC, America/New_York, Pacific/Auckland]
+    env:
+      TZ: ${{ matrix.timezone }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: dart-lang/setup-dart@v1
-      with:
-        sdk: '2.19'  # Last stable Dart 2.x version
-    - name: Install dependencies
-      run: dart pub get
-    - name: Run test with coverage 
-      run: dart test --coverage coverage
-    - name: Generate lcov.info for test coverage
-      run: dart pub global activate coverage && dart pub global run coverage:format_coverage -i coverage/test -o coverage/lcov.info --lcov
-    - name: upload reports to codecov
-      run: curl -s https://codecov.io/bash | bash
-      env:
-        CODECOV_TOKEN: '${{ secrets.CODECOV_TOKEN }}'
+      - uses: actions/checkout@v7.0.1
+      - uses: dart-lang/setup-dart@v1.8.2
+        with:
+          sdk: stable
+      - run: dart --version
+      - run: dart pub get
+      - run: dart analyze
+      - run: dart test test/src test/shared_times_test.dart
+      - if: matrix.timezone == 'UTC'
+        run: dart test test/stress_test.dart
+      - if: matrix.timezone == 'UTC'
+        run: dart compile exe example/adhan_example.dart -o /tmp/adhan-smoke
+      - if: matrix.timezone == 'UTC'
+        run: /tmp/adhan-smoke
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dart-lang/setup-dart@v1.8.2
+        with:
+          sdk: stable
+      - run: dart pub get
+      - run: dart test -p chrome --compiler dart2js test/src
+      - run: dart test -p chrome --compiler dart2wasm test/src
+      - run: dart compile js example/adhan_example.dart -o /tmp/adhan.js
+      - run: dart compile wasm example/adhan_example.dart -o /tmp/adhan.wasm
+
+  reference:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dart-lang/setup-dart@v1.8.2
+        with:
+          sdk: stable
+      - uses: actions/checkout@v7.0.1
+        with:
+          repository: batoulapps/adhan-js
+          ref: d2993d56fac7d8a06abba4837347bd3fc9cbd188
+          path: .reference/adhan-js
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: .reference/adhan-js
+      - run: npm run build:esm
+        working-directory: .reference/adhan-js
+      - run: node tool/generate_reference.mjs /tmp/reference-results.json
+      - run: dart pub get
+      - run: dart run tool/verify_reference.dart /tmp/reference-results.json
+
+  swift-reference:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dart-lang/setup-dart@v1.8.2
+        with:
+          sdk: stable
+      - run: dart pub get
+      - run: dart run tool/generate_cross_port_cases.dart "$RUNNER_TEMP/cross-port.json"
+      - uses: actions/checkout@v7.0.1
+        with:
+          repository: batoulapps/adhan-swift
+          ref: 96998baa08d697cbc7b471ebad3749f689550b74
+          path: .reference/adhan-swift
+          persist-credentials: false
+      - name: Unmodified Swift baseline
+        run: |
+          swift --version
+          cp tool/reference/swift_main.swift "$RUNNER_TEMP/main.swift"
+          swiftc -O $(find .reference/adhan-swift/Sources -name '*.swift' | sort) "$RUNNER_TEMP/main.swift" -o "$RUNNER_TEMP/swift-baseline"
+          "$RUNNER_TEMP/swift-baseline" "$RUNNER_TEMP/cross-port.json" --baseline
+      - name: Strict Swift comparison with documented dependency correction
+        run: |
+          python3 tool/reference/patch_swift_reference.py .reference/adhan-swift
+          swiftc -O $(find .reference/adhan-swift/Sources -name '*.swift' | sort) tool/reference/swift_sunrise_only.swift "$RUNNER_TEMP/main.swift" -o "$RUNNER_TEMP/swift-parity"
+          "$RUNNER_TEMP/swift-parity" "$RUNNER_TEMP/cross-port.json"
+
+  kotlin-reference:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dart-lang/setup-dart@v1.8.2
+        with:
+          sdk: stable
+      - run: dart pub get
+      - run: dart run tool/generate_cross_port_cases.dart "$RUNNER_TEMP/cross-port.json"
+      - uses: actions/checkout@v7.0.1
+        with:
+          repository: batoulapps/adhan-kotlin
+          ref: a39517d0aafb95addef28956d96e5823b3aea1cc
+          path: .reference/adhan-kotlin
+          persist-credentials: false
+      - uses: actions/setup-java@v6.3.0
+        with:
+          java-version: '21'
+          distribution: zulu
+      - name: Direct Kotlin comparison
+        run: |
+          cp tool/reference/KotlinParityTest.kt .reference/adhan-kotlin/adhan/src/jvmTest/kotlin/com/batoulapps/adhan2/
+          cd .reference/adhan-kotlin
+          export ADHAN_DART_CROSS_PORT="$RUNNER_TEMP/cross-port.json"
+          ./gradlew --no-daemon --no-configure-on-demand :adhan:jvmTest --tests 'com.batoulapps.adhan2.KotlinParityTest' --info
+
+  ephemeris:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dart-lang/setup-dart@v1.8.2
+        with:
+          sdk: stable
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.12'
+      - run: dart pub get
+      - run: dart run tool/generate_ephemeris_cases.dart "$RUNNER_TEMP/ephemeris.json"
+      - run: python -m pip install skyfield==1.53
+      - name: Independent JPL DE440s comparison
+        run: python tool/reference/verify_ephemeris.py "$RUNNER_TEMP/ephemeris.json"

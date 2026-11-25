@@ -7,7 +7,7 @@ const double degrees2Radians = pi / 180.0;
 const double radians2Degrees = 180.0 / pi;
 
 /// Convert [radians] to degrees.
-double degrees(double radians) => radians * radians2Degrees;
+double degrees(double radians) => radians * 180.0 / pi;
 
 /// Convert [degrees] to radians.
-double radians(double degrees) => degrees * degrees2Radians;
+double radians(double degrees) => degrees * pi / 180.0;

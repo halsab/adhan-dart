@@ -15,7 +15,7 @@ class CalendricalHelper {
     final D = day + (hours / 24);
 
     final A = Y ~/ 100;
-    final B = (2 - A + (A / 4)).toInt();
+    final B = 2 - A + A ~/ 4;
 
     final i0 = (365.25 * (Y + 4716)).toInt();
     final i1 = (30.6001 * (M + 1)).toInt();
@@ -28,7 +28,7 @@ class CalendricalHelper {
   static double julianDayByDate(DateTime _date) {
     final date = _date;
     return julianDay(date.year, date.month, date.day,
-        hours: (date.hour + date.minute) / 60.0);
+        hours: date.hour + date.minute / 60.0 + date.second / 3600.0);
   }
 
   /// Julian century from the epoch.

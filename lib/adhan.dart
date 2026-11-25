@@ -1,5 +1,4 @@
-/// Adhan for Dart / Muslim Prayer Times Library.
-/// Now retrieving Prayer time in Dart easier than ever.
-library adhan;
+/// Offline Islamic prayer times, night milestones and Qibla in pure Dart.
+library;
 
 export 'src/adhan_base.dart';

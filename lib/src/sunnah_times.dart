@@ -1,45 +1,50 @@
-import 'prayer_times.dart';
+import 'calculation_options.dart';
 import 'data/calendar_util.dart';
-import 'data/date_components.dart';
+import 'prayer_times.dart';
 
-class SunnahTimes {
-  /// The midpoint between Maghrib and Fajr
-  late DateTime _middleOfTheNight;
+/// Night milestones computed from today's Maghrib and tomorrow's Fajr.
+/// A valid daytime schedule does not guarantee a valid following night.
+final class SunnahTimes {
+  final DateTime middleOfTheNight, lastThirdOfTheNight, fajrTomorrow;
+  final PrayerTimes nextDayPrayerTimes;
 
-  /// The midpoint between Maghrib and Fajr
-  DateTime get middleOfTheNight => _middleOfTheNight;
+  SunnahTimes._(this.middleOfTheNight, this.lastThirdOfTheNight,
+      this.fajrTomorrow, this.nextDayPrayerTimes);
 
-  /// The beginning of the last third of the period between Maghrib and Fajr,
-  /// a recommended time to perform Qiyam
-  late DateTime _lastThirdOfTheNight;
+  factory SunnahTimes(PrayerTimes today) {
+    if (today.dateComponents.year == 9999 && today.dateComponents.month == 12 &&
+        today.dateComponents.day == 31) {
+      throw const PrayerTimeCalculationException(
+          CalculationFailure.invalidNight, 'Following date outside supported range');
+    }
+    final tomorrow = PrayerTimes(today.coordinates,
+        today.dateComponents.addDays(1), today.calculationParameters);
+    final night = tomorrow.fajr.difference(today.maghrib);
+    if (night <= Duration.zero || night >= const Duration(days: 1) ||
+        !tomorrow.fajr.isAfter(today.isha)) {
+      throw const PrayerTimeCalculationException(
+          CalculationFailure.invalidNight, 'Invalid Maghrib-to-Fajr interval');
+    }
+    DateTime milestone(double portion) => CalendarUtil.roundedMinute(
+        DateTime.fromMillisecondsSinceEpoch(
+            (today.maghrib.millisecondsSinceEpoch + night.inMilliseconds * portion).truncate(),
+            isUtc: true),
+        today.calculationParameters.rounding);
+    final middle = milestone(0.5);
+    final lastThird = milestone(2 / 3);
+    if (!middle.isAfter(today.maghrib) || !lastThird.isAfter(middle) ||
+        !tomorrow.fajr.isAfter(lastThird)) {
+      throw const PrayerTimeCalculationException(
+          CalculationFailure.invalidNight, 'Night milestones are out of order');
+    }
+    return SunnahTimes._(middle, lastThird, tomorrow.fajr, tomorrow);
+  }
 
-  /// The beginning of the last third of the period between Maghrib and Fajr,
-  /// a recommended time to perform Qiyam
-  DateTime get lastThirdOfTheNight => _lastThirdOfTheNight;
-
-  /// Calculate SunnahTimes with PrayerTimes instance.
-  ///
-  /// [prayerTimes] a PrayerTimes instance
-  SunnahTimes(PrayerTimes prayerTimes) {
-    final currentPrayerTimesDate =
-        CalendarUtil.resolveTimeByDateComponents(prayerTimes.dateComponents);
-    final tomorrowPrayerTimesDate =
-        currentPrayerTimesDate.add(Duration(days: 1));
-    final tomorrowPrayerTimes = PrayerTimes(
-        prayerTimes.coordinates,
-        DateComponents.from(tomorrowPrayerTimesDate),
-        prayerTimes.calculationParameters,
-        utcOffset: prayerTimes.utcOffset);
-
-    final nightDurationInSeconds =
-        (tomorrowPrayerTimes.fajr.millisecondsSinceEpoch -
-                prayerTimes.maghrib.millisecondsSinceEpoch) ~/
-            1000;
-
-    _middleOfTheNight = CalendarUtil.roundedMinute(prayerTimes.maghrib
-        .add(Duration(seconds: nightDurationInSeconds ~/ 2.0)));
-
-    _lastThirdOfTheNight = CalendarUtil.roundedMinute(prayerTimes.maghrib.add(
-        Duration(seconds: (nightDurationInSeconds * (2.0 / 3.0)).toInt())));
+  static SunnahTimes? tryCalculate(PrayerTimes today) {
+    try {
+      return SunnahTimes(today);
+    } on PrayerTimeCalculationException {
+      return null;
+    }
   }
 }

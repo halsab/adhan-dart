@@ -159,7 +159,7 @@ class Astronomical {
     /* Equation from Astronomical Algorithms page 93 */
     final term1 = sin(radians(phi)) * sin(radians(delta));
     final term2 = cos(radians(phi)) * cos(radians(delta)) * cos(radians(H));
-    return degrees(asin(term1 + term2));
+    return degrees(asin((term1 + term2).clamp(-1.0, 1.0).toDouble()));
   }
 
   /// Return the approximate transite
@@ -170,7 +170,12 @@ class Astronomical {
   static double approximateTransit(double L, double theta0, double alpha2) {
     /* Equation from page Astronomical Algorithms 102 */
     final Lw = L * -1;
-    return DoubleUtil.normalizeWithBound((alpha2 + Lw - theta0) / 360, 1);
+    final m0 = DoubleUtil.normalizeWithBound((alpha2 + Lw - theta0) / 360, 1);
+    // Keep +180 and -180 on their respective signed solar-day boundaries.
+    final expected = (12 - L / 15) / 24;
+    if (m0 - expected > 0.5) return m0 - 1;
+    if (expected - m0 > 0.5) return m0 + 1;
+    return m0;
   }
 
   /// The time at which the sun is at its highest point in the sky (in universal time)
@@ -221,36 +226,68 @@ class Astronomical {
       double delta2,
       double delta1,
       double delta3) {
-    /* Equation from page Astronomical Algorithms 102 */
-    final Lw = coordinates.longitude * -1;
-    final term1 = sin(radians(h0)) -
-        (sin(radians(coordinates.latitude)) * sin(radians(delta2)));
-    final term2 = cos(radians(coordinates.latitude)) * cos(radians(delta2));
-    final H0 = degrees(acos(term1 / term2));
-    final m = afterTransit ? m0 + (H0 / 360) : m0 - (H0 / 360);
-    final theta = DoubleUtil.unwindAngle(theta0 + (360.985647 * m));
-    final alpha = DoubleUtil.unwindAngle(interpolateAngles(
-        /* value */ alpha2,
-        /* previousValue */ alpha1,
-        /* nextValue */ alpha3,
-        /* factor */ m));
-    final delta = interpolate(
-        /* value */ delta2,
-        /* previousValue */ delta1,
-        /* nextValue */ delta3,
-        /* factor */ m);
-    final H = (theta - Lw - alpha);
-    final h = altitudeOfCelestialBody(
-        /* observerLatitude */ coordinates.latitude,
-        /* declination */ delta,
-        /* localHourAngle */ H);
-    final term3 = h - h0;
-    final term4 = 360 *
-        cos(radians(delta)) *
-        cos(radians(coordinates.latitude)) *
-        sin(radians(H));
-    final deltaM = term3 / term4;
-    return (m + deltaM) * 24;
+    // Port of the bracketed solver in Adhan JS PR #243 (MIT).
+    // Fractions of a UTC day; the root must lie between the upper and
+    // adjacent lower culmination, not on an unrelated solar cycle.
+    final longitude = coordinates.longitude;
+    final latitude = coordinates.latitude;
+    ({double h, double delta, double hourAngle}) altitudeAt(double m) {
+      final theta = DoubleUtil.unwindAngle(theta0 + 360.985647 * m);
+      final alpha = DoubleUtil.unwindAngle(
+          interpolateAngles(alpha2, alpha1, alpha3, m));
+      final delta = interpolate(delta2, delta1, delta3, m);
+      final hourAngle = theta + longitude - alpha;
+      return (
+        h: altitudeOfCelestialBody(latitude, delta, hourAngle),
+        delta: delta,
+        hourAngle: hourAngle
+      );
+    }
+
+    final transit = correctedTransit(m0, longitude, theta0,
+        alpha2, alpha1, alpha3) / 24;
+    final lower = correctedTransit(
+        transit + (afterTransit ? 0.5 : -0.5), longitude + 180,
+        theta0, alpha2, alpha1, alpha3) / 24;
+    if (!(altitudeAt(transit).h > h0) || !(altitudeAt(lower).h < h0)) {
+      return double.nan;
+    }
+    var lo = min(transit, lower);
+    var hi = max(transit, lower);
+    final cosH = (sin(radians(h0)) -
+            sin(radians(latitude)) * sin(radians(delta2))) /
+        (cos(radians(latitude)) * cos(radians(delta2)));
+    final initial = degrees(acos(cosH)) / 360;
+    var m = m0 + (afterTransit ? initial : -initial);
+    if (!(m > lo && m < hi)) m = (lo + hi) / 2;
+    var dm = hi - lo;
+    var previousDm = dm;
+    for (var i = 0; i < 100; i++) {
+      final a = altitudeAt(m);
+      final f = a.h - h0;
+      if (!f.isFinite) return double.nan;
+      if (f == 0) return m * 24;
+      if ((f > 0) == afterTransit) {
+        lo = m;
+      } else {
+        hi = m;
+      }
+      final slope = -360 * cos(radians(a.delta)) *
+          cos(radians(latitude)) * sin(radians(a.hourAngle));
+      final leavesBracket =
+          ((m - hi) * slope - f) * ((m - lo) * slope - f) >= 0;
+      final tooSlow = (2 * f).abs() > (previousDm * slope).abs();
+      previousDm = dm;
+      if (!slope.isFinite || slope == 0 || leavesBracket || tooSlow) {
+        dm = (hi - lo) / 2;
+        m = lo + dm;
+      } else {
+        dm = -f / slope;
+        m += dm;
+      }
+      if (dm.abs() < 1e-9) return m * 24;
+    }
+    return double.nan;
   }
 
   /* Interpolation of a value given equidistant

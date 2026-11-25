@@ -1,37 +1,42 @@
 import 'package:adhan/adhan.dart';
-import 'package:intl/intl.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('Test SunnahTimes NewYork', () {
-    final params = CalculationMethod.north_america.getParameters();
-    final coordinates = Coordinates(35.7750, -78.6336);
-    final newYorkUtcOffset = Duration(hours: -4);
+  test('night fails explicitly when polar next-day adjusted events collide', () {
+    final coordinates = Coordinates(-78, 15);
+    final date = DateComponents(2025, 4, 26);
+    final p = CalculationMethod.moon_sighting_committee.getParameters().copyWith(
+        highLatitudeRule: HighLatitudeRule.seventh_of_the_night,
+        polarCircleResolution: PolarCircleResolution.aqrabBalad,
+        shafaq: Shafaq.ahmer,
+        elevationFromHorizon: const ElevationFromHorizon(450));
+    final today = PrayerTimes(coordinates, date, p);
+    expect(today.usedPolarResolution, isTrue);
+    expect(() => PrayerTimes(coordinates, date.addDays(1), p),
+        throwsA(isA<PrayerTimeCalculationException>().having(
+            (e) => e.reason, 'reason', CalculationFailure.invalidAdjustments)));
+    expect(SunnahTimes.tryCalculate(today), isNull);
+    expect(PrayerSchedule(today).sunnahTimes, isNull);
+  });
 
-    final todayComponents = DateComponents(2015, 7, 12);
-    final todayPrayers = PrayerTimes(coordinates, todayComponents, params,
-        utcOffset: newYorkUtcOffset);
-
-    expect(DateFormat.yMd().add_jm().format(todayPrayers.maghrib),
-        '7/12/2015 8:32 PM');
-
-    final tomorrowComponents = DateComponents(2015, 7, 13);
-    final tomorrowPrayers = PrayerTimes(coordinates, tomorrowComponents, params,
-        utcOffset: newYorkUtcOffset);
-
-    expect(DateFormat.yMd().add_jm().format(tomorrowPrayers.fajr),
-        '7/13/2015 4:43 AM');
-
-    /*
-     Night: 8:32 PM to 4:43 AM
-     Duration: 8 hours, 11 minutes
-     Middle = 8:32 PM + 4 hours, 5.5 minutes = 12:37:30 AM which rounds to 12:38 AM
-     Last Third = 8:32 PM + 5 hours, 27.3 minutes = 1:59:20 AM which rounds to 1:59 AM
-     */
-    final sunnahTimes = SunnahTimes(todayPrayers);
-    expect(DateFormat.yMd().add_jm().format(sunnahTimes.middleOfTheNight),
-        '7/13/2015 12:38 AM');
-    expect(DateFormat.yMd().add_jm().format(sunnahTimes.lastThirdOfTheNight),
-        '7/13/2015 1:59 AM');
+  test('night milestones use the actual next-day Fajr and preserve UTC', () {
+    final coordinates = Coordinates(35.775, -78.6336);
+    final date = DateComponents(2015, 7, 12);
+    final params = CalculationMethod.north_america.getParameters()
+        .copyWith(rounding: Rounding.none);
+    final today = PrayerTimes(coordinates, date, params);
+    final tomorrow = PrayerTimes(coordinates, date.addDays(1), params);
+    final night = SunnahTimes(today);
+    final duration = tomorrow.fajr.difference(today.maghrib).inMilliseconds;
+    expect(night.fajrTomorrow, tomorrow.fajr);
+    expect(night.middleOfTheNight, today.maghrib.add(Duration(milliseconds: duration ~/ 2)));
+    expect(night.lastThirdOfTheNight,
+        today.maghrib.add(Duration(milliseconds: (duration * 2 / 3).truncate())));
+    final timeline = PrayerSchedule(today);
+    expect(timeline.events.last.kind, ScheduleEventKind.nextFajr);
+    expect(timeline.events.last.time, tomorrow.fajr);
+    expect(timeline.currentPrayer(night.lastThirdOfTheNight), Prayer.isha);
+    expect(timeline.nextEvent(tomorrow.fajr), isNull);
+    expect(() => timeline.events.clear(), throwsUnsupportedError);
   });
 }

@@ -1,400 +1,154 @@
-// @dart=2.9
-
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:adhan/adhan.dart';
-import 'package:adhan/src/data/calendar_util.dart';
-import 'package:adhan/src/extensions/datetime.dart';
-import 'package:enum_to_string/enum_to_string.dart';
-import 'package:intl/intl.dart';
-import 'package:path/path.dart';
-import 'package:strings/strings.dart';
 import 'package:test/test.dart';
-import 'package:timezone/standalone.dart';
+
+List<DateTime> ordered(PrayerTimes p) =>
+    [p.fajr, p.sunrise, p.dhuhr, p.asr, p.maghrib, p.isha];
+
+void expectOrdered(PrayerTimes p) {
+  final times = ordered(p);
+  expect(times.every((t) => t.isUtc), isTrue);
+  for (var i = 1; i < times.length; i++) {
+    expect(times[i].isAfter(times[i - 1]), isTrue,
+        reason: '${p.dateComponents}: ${times[i - 1]} >= ${times[i]}');
+  }
+}
 
 void main() {
-  test('Test Prayer Time in Kushtia', () {
-    final kushtia = Coordinates(23.9088, 89.1220);
-    final kushtiaUtcOffset = Duration(hours: 6);
-    final date = DateComponents(2020, 6, 12);
-    final params = CalculationMethod.karachi.getParameters();
-    params.madhab = Madhab.hanafi;
-
-    final prayerTimes =
-        PrayerTimes(kushtia, date, params, utcOffset: kushtiaUtcOffset);
-
-    expect(DateFormat.jm().format(prayerTimes.fajr), '3:48 AM');
-    expect(DateFormat.jm().format(prayerTimes.sunrise), '5:16 AM');
-    expect(DateFormat.jm().format(prayerTimes.dhuhr), '12:04 PM');
-    expect(DateFormat.jm().format(prayerTimes.asr), '4:44 PM');
-    expect(DateFormat.jm().format(prayerTimes.maghrib), '6:51 PM');
-    expect(DateFormat.jm().format(prayerTimes.isha), '8:19 PM');
+  final coords = Coordinates(35.775, -78.6336);
+  final date = DateComponents(2015, 7, 12);
+  final params = CalculationMethod.north_america.getParameters();
+  test('UTC values from current Adhan JS test case', () {
+    final p = PrayerTimes(coords, date, params.copyWith(madhab: Madhab.hanafi));
+    expectOrdered(p);
+    expect(ordered(p), [
+      DateTime.utc(2015, 7, 12, 8, 42), DateTime.utc(2015, 7, 12, 10, 8),
+      DateTime.utc(2015, 7, 12, 17, 21), DateTime.utc(2015, 7, 12, 22, 22),
+      DateTime.utc(2015, 7, 13, 0, 32), DateTime.utc(2015, 7, 13, 1, 57),
+    ]);
+    expect(p.currentPrayer(p.fajr.subtract(const Duration(seconds: 1))), Prayer.none);
+    expect(p.currentPrayer(p.fajr), Prayer.fajr);
+    expect(p.nextPrayer(p.fajr), Prayer.sunrise);
+    expect(p.nextPrayer(p.isha), Prayer.none);
+    expect(p.timeForPrayer(Prayer.none), isNull);
+    expect(p.timeForPrayer(Prayer.asr), p.asr);
+    expect(PrayerTimes.today(coords, params, localNow: DateTime.utc(2015, 7, 12, 23))
+        .dateComponents, date);
   });
 
-  test('Test Prayer Time in Tehran', () {
-    final tehran = Coordinates(35.715298, 51.404343);
-    final tehranUtcOffset = Duration(hours: 3, minutes: 30);
-    final date = DateComponents(2021, 02, 27);
-    final params = CalculationMethod.tehran.getParameters();
-    params.madhab = Madhab.hanafi;
-
-    final prayerTimes = PrayerTimes(
-      tehran,
-      date,
-      params,
-      utcOffset: tehranUtcOffset,
-    );
-
-    expect(DateFormat.jm().format(prayerTimes.fajr), '5:14 AM');
-    expect(DateFormat.jm().format(prayerTimes.sunrise), '6:37 AM');
-    expect(DateFormat.jm().format(prayerTimes.dhuhr), '12:17 PM');
-    //Some websites may indicate 4:16 pm
-    expect(DateFormat.jm().format(prayerTimes.asr), '4:17 PM');
-    expect(DateFormat.jm().format(prayerTimes.maghrib), '6:16 PM');
-    expect(DateFormat.jm().format(prayerTimes.isha), '7:03 PM');
+  test('Hanafi Asr occurs after Shafi Asr; offsets applied once', () {
+    final shafi = PrayerTimes(coords, date, params);
+    final hanafi = PrayerTimes(coords, date, params.copyWith(madhab: Madhab.hanafi));
+    expect(hanafi.asr.isAfter(shafi.asr), isTrue);
+    final offset = PrayerTimes(coords, date,
+        params.copyWith(adjustments: const PrayerAdjustments(fajr: 4, asr: -2)));
+    expect(offset.fajr.difference(shafi.fajr), const Duration(minutes: 4));
+    expect(offset.asr.difference(shafi.asr), const Duration(minutes: -2));
   });
 
-  test(
-      'Test PrayerTimes for Local Timezone Output When Not Setting utcOffset param',
-      () {
-    final kushtia = Coordinates(23.9088, 89.1220);
-    final date = DateComponents(2020, 6, 12);
-    final params = CalculationMethod.karachi.getParameters();
-    params.madhab = Madhab.hanafi;
-
-    final prayerTimes = PrayerTimes(kushtia, date, params);
-
-    expect(prayerTimes.fajr.isUtc, false);
-    expect(prayerTimes.sunrise.isUtc, false);
-    expect(prayerTimes.dhuhr.isUtc, false);
-    expect(prayerTimes.asr.isUtc, false);
-    expect(prayerTimes.maghrib.isUtc, false);
-    expect(prayerTimes.isha.isUtc, false);
+  test('no polar substitution for invalid user adjustments', () {
+    expect(() => PrayerTimes(coords, date, params.copyWith(
+        adjustments: const PrayerAdjustments(fajr: 300))),
+        throwsA(isA<PrayerTimeCalculationException>().having(
+            (e) => e.reason, 'reason', CalculationFailure.invalidAdjustments)));
   });
 
-  test('Test PrayerTimes.timeForPrayer', () {
-    final kushtia = Coordinates(23.9088, 89.1220);
-    final kushtiaUtcOffset = Duration(hours: 6);
-    final date = DateComponents(2020, 6, 12);
-    final params = CalculationMethod.karachi.getParameters();
-    params.madhab = Madhab.hanafi;
-
-    final prayerTimes =
-        PrayerTimes(kushtia, date, params, utcOffset: kushtiaUtcOffset);
-
-    expect(DateFormat.jm().format(prayerTimes.timeForPrayer(Prayer.fajr)),
-        '3:48 AM');
-    expect(DateFormat.jm().format(prayerTimes.timeForPrayer(Prayer.sunrise)),
-        '5:16 AM');
-    expect(DateFormat.jm().format(prayerTimes.timeForPrayer(Prayer.dhuhr)),
-        '12:04 PM');
-    expect(DateFormat.jm().format(prayerTimes.timeForPrayer(Prayer.asr)),
-        '4:44 PM');
-    expect(DateFormat.jm().format(prayerTimes.timeForPrayer(Prayer.maghrib)),
-        '6:51 PM');
-    expect(DateFormat.jm().format(prayerTimes.timeForPrayer(Prayer.isha)),
-        '8:19 PM');
+  test('date line UTC instants keep the intended solar day', () {
+    for (final lon in [-180.0, -179.9, 179.9, 180.0]) {
+      final p = PrayerTimes(Coordinates(0, lon), DateComponents(2026, 3, 20),
+          CalculationMethod.muslim_world_league.getParameters());
+      expectOrdered(p);
+      final solarNoon = p.dhuhr.add(Duration(minutes: (lon * 4).round()));
+      expect(solarNoon.day, 20);
+      expect(solarNoon.hour, inInclusiveRange(11, 12));
+    }
   });
 
-  test('Test PrayerTimes.currentPrayerByDateTime', () {
-    final kushtia = Coordinates(23.9088, 89.1220);
-    final kushtiaUtcOffset = Duration(hours: 6);
-    final date = DateComponents(2020, 6, 12);
-    final params = CalculationMethod.karachi.getParameters();
-    params.madhab = Madhab.hanafi;
-
-    final prayerTimes =
-        PrayerTimes(kushtia, date, params, utcOffset: kushtiaUtcOffset);
-
-    expect(prayerTimes.currentPrayerByDateTime(prayerTimes.fajr), Prayer.fajr);
-    expect(prayerTimes.currentPrayerByDateTime(prayerTimes.sunrise),
-        Prayer.sunrise);
-    expect(
-        prayerTimes.currentPrayerByDateTime(prayerTimes.dhuhr), Prayer.dhuhr);
-    expect(prayerTimes.currentPrayerByDateTime(prayerTimes.asr), Prayer.asr);
-    expect(prayerTimes.currentPrayerByDateTime(prayerTimes.maghrib),
-        Prayer.maghrib);
-    expect(prayerTimes.currentPrayerByDateTime(prayerTimes.isha), Prayer.isha);
+  test('polar fallback is bounded, explicit, and retains provenance', () {
+    final polar = Coordinates(78.2232, 15.6469);
+    final summer = DateComponents(2026, 6, 21);
+    final unresolved = params.copyWith(polarCircleResolution: PolarCircleResolution.unresolved);
+    expect(PrayerTimes.tryCalculate(polar, summer, unresolved), isNull);
+    final nearestLocation = PrayerTimes(polar, summer, params);
+    expectOrdered(nearestLocation);
+    expect(nearestLocation.appliedPolarResolution, PolarCircleResolution.aqrabBalad);
+    expect(nearestLocation.calculationCoordinates.latitude, lessThan(polar.latitude));
+    expect(nearestLocation.calculationCoordinates.longitude, polar.longitude);
+    expect(nearestLocation.calculationDate, summer);
+    expect(nearestLocation.isApproximate, isTrue);
+    final nearestDate = PrayerTimes(polar, summer,
+        params.copyWith(polarCircleResolution: PolarCircleResolution.aqrabYaum));
+    expectOrdered(nearestDate);
+    expect(nearestDate.calculationCoordinates, polar);
+    expect(nearestDate.calculationDate, isNot(summer));
+    expect(nearestDate.dateComponents, summer);
+    expect(nearestDate.appliedPolarResolution, PolarCircleResolution.aqrabYaum);
+    final south = PrayerTimes(Coordinates(-78, 15), DateComponents(2026, 12, 21), params);
+    expect(south.calculationCoordinates.latitude, inInclusiveRange(-78, 0));
+    expectOrdered(south);
   });
 
-  test('Test PrayerTimes.nextPrayerByDateTime', () {
-    final kushtia = Coordinates(23.9088, 89.1220);
-    final kushtiaUtcOffset = Duration(hours: 6);
-    final date = DateComponents(2020, 6, 12);
-    final params = CalculationMethod.karachi.getParameters();
-    params.madhab = Madhab.hanafi;
-
-    final prayerTimes =
-        PrayerTimes(kushtia, date, params, utcOffset: kushtiaUtcOffset);
-
-    expect(prayerTimes.nextPrayerByDateTime(prayerTimes.fajr), Prayer.sunrise);
-    expect(prayerTimes.nextPrayerByDateTime(prayerTimes.sunrise), Prayer.dhuhr);
-    expect(prayerTimes.nextPrayerByDateTime(prayerTimes.dhuhr), Prayer.asr);
-    expect(prayerTimes.nextPrayerByDateTime(prayerTimes.asr), Prayer.maghrib);
-    expect(prayerTimes.nextPrayerByDateTime(prayerTimes.maghrib), Prayer.isha);
-    expect(prayerTimes.nextPrayerByDateTime(prayerTimes.isha), Prayer.none);
+  test('impossible interval terminates even near equator', () {
+    final invalid = params.copyWith(ishaInterval: 1);
+    for (final latitude in [-0.3, 0.0, 0.3, 70.0]) {
+      expect(PrayerTimes.tryCalculate(Coordinates(latitude, 10), date, invalid), isNull);
+    }
+    expect(PrayerTimes.tryCalculate(Coordinates(70, 10), date,
+        invalid.copyWith(polarCircleResolution: PolarCircleResolution.aqrabYaum)), isNull);
   });
 
-  test('Test PrayerTimes.today', () {
-    final kushtia = Coordinates(23.9088, 89.1220);
-    final kushtiaUtcOffset = Duration(hours: 6);
-    final params = CalculationMethod.karachi.getParameters();
-    params.madhab = Madhab.hanafi;
-
-    final prayerTimes =
-        PrayerTimes.today(kushtia, params, utcOffset: kushtiaUtcOffset);
-
-    final now = DateTime.now().toUtc().add(kushtiaUtcOffset);
-    expect(prayerTimes.dateComponents,
-        DateComponents(now.year, now.month, now.day));
-    expect(prayerTimes.fajr.day, now.day);
-    expect(prayerTimes.sunrise.day, now.day);
-    expect(prayerTimes.dhuhr.day, now.day);
-    expect(prayerTimes.asr.day, now.day);
-    expect(prayerTimes.maghrib.day, now.day);
-    expect(prayerTimes.isha.day, now.day);
+  test('Shafaq controls seasonal evening twilight; source is exposed', () {
+    final location = Coordinates(51.507194, -0.116711);
+    final summer = DateComponents(2026, 6, 21);
+    final method = CalculationMethod.moon_sighting_committee.getParameters();
+    final red = PrayerTimes(location, summer, method.copyWith(shafaq: Shafaq.ahmer));
+    final white = PrayerTimes(location, summer, method.copyWith(shafaq: Shafaq.abyad));
+    expect(red.ishaSource, PrayerTimeSource.seasonalTwilight);
+    expect(white.ishaSource, PrayerTimeSource.seasonalTwilight);
+    expect(white.isha.isAfter(red.isha), isTrue);
   });
 
-  test('Test PrayerTimes.utc', () {
-    final kushtia = Coordinates(23.9088, 89.1220);
-    final date = DateComponents(2020, 6, 12);
-    final params = CalculationMethod.karachi.getParameters();
-    params.madhab = Madhab.hanafi;
-
-    final prayerTimes = PrayerTimes.utc(kushtia, date, params);
-
-    expect(prayerTimes.fajr.isUtc, true);
-    expect(prayerTimes.sunrise.isUtc, true);
-    expect(prayerTimes.dhuhr.isUtc, true);
-    expect(prayerTimes.asr.isUtc, true);
-    expect(prayerTimes.maghrib.isUtc, true);
-    expect(prayerTimes.isha.isUtc, true);
+  test('elevation adjusts horizon events, not direct twilight or Asr', () {
+    final location = Coordinates(36.3, 30.1);
+    final equinox = DateComponents(2024, 3, 20);
+    final method = CalculationMethod.muslim_world_league.getParameters()
+        .copyWith(rounding: Rounding.none);
+    final normal = PrayerTimes(location, equinox, method);
+    final elevated = PrayerTimes(location, equinox, method.copyWith(
+        elevationFromHorizon: const ElevationFromHorizon(450)));
+    expect(normal.sunrise.difference(elevated.sunrise).inSeconds, inInclusiveRange(180, 240));
+    expect(elevated.sunset.difference(normal.sunset).inSeconds, inInclusiveRange(180, 240));
+    expect(elevated.fajr, normal.fajr);
+    expect(elevated.asr, normal.asr);
+    expect(elevated.isha, normal.isha);
+    final eastOnly = PrayerTimes(location, equinox, method.copyWith(
+        elevationFromHorizon: const ElevationFromHorizon.separate(sunrise: 450, sunset: 0)));
+    expect(eastOnly.sunrise, elevated.sunrise);
+    expect(eastOnly.sunset, normal.sunset);
+    final negative = PrayerTimes(location, equinox, method.copyWith(
+        elevationFromHorizon: const ElevationFromHorizon(-100)));
+    expect(ordered(negative), ordered(normal));
+    final tehran = PrayerTimes(location, equinox,
+        CalculationMethod.tehran.getParameters().copyWith(rounding: Rounding.none));
+    expect(tehran.maghrib.isAfter(tehran.sunset), isTrue);
   });
 
-  test('Test Prayer Time in NewYork with utcOffset Factory', () {
-    // with custom timezone UTC Offset.
-
-    final newYork = Coordinates(35.7750, -78.6336);
-    final nyUtcOffset = Duration(hours: -4);
-    final nyDate = DateComponents(2015, 7, 12);
-    final nyParams = CalculationMethod.north_america.getParameters();
-    nyParams.madhab = Madhab.hanafi;
-    final nyPrayerTimes =
-        PrayerTimes.utcOffset(newYork, nyDate, nyParams, nyUtcOffset);
-
-    expect(DateFormat.jm().format(nyPrayerTimes.fajr), '4:42 AM');
-    expect(DateFormat.jm().format(nyPrayerTimes.sunrise), '6:08 AM');
-    expect(DateFormat.jm().format(nyPrayerTimes.dhuhr), '1:21 PM');
-    expect(DateFormat.jm().format(nyPrayerTimes.asr), '6:22 PM');
-    expect(DateFormat.jm().format(nyPrayerTimes.maghrib), '8:32 PM');
-    expect(DateFormat.jm().format(nyPrayerTimes.isha), '9:57 PM');
+  test('fixed interval, sunset fallback and rounding preserve their conventions', () {
+    final params = CalculationMethod.umm_al_qura.getParameters()
+        .copyWith(rounding: Rounding.none);
+    final p = PrayerTimes(coords, date, params);
+    expect(p.isha.difference(p.sunset), const Duration(minutes: 90));
+    expect(p.ishaSource, PrayerTimeSource.fixedInterval);
+    final fallback = PrayerTimes(coords, date, params.copyWith(maghribAngle: 90));
+    expect(fallback.maghrib, fallback.sunset);
+    expect(fallback.maghribSource, PrayerTimeSource.sunsetFallback);
+    expect(fallback.isApproximate, isTrue);
   });
 
-  test('Test Prayer Times in Wide Range Locations From JSON Data.', () async {
-    await initializeTimeZone();
-
-    final jsonDir = Directory('./test/data/prayer-times');
-    final files = jsonDir.listSync();
-    files.forEach((fileEntity) {
-      final file = fileEntity;
-      if (file.path.endsWith('.json') && file is File) {
-        print('Testing Timings For: ${basename(file.path)}');
-
-        final jsonString = file.readAsStringSync();
-        final data = json.decode(jsonString);
-        final params = data['params'];
-        final variance = data['variance'];
-        final times = data['times'] as List<dynamic>;
-
-        // Convert String Params to Enums
-        final madhab = EnumToString.fromString(Madhab.values, params['madhab']);
-        final highLatitudeRule = EnumToString.fromString(
-            HighLatitudeRule.values, underscore(params['highLatitudeRule']));
-
-        if (params['method'] == 'MoonsightingCommittee') {
-          params['method'] = 'MoonSightingCommittee';
-        }
-        final calculationMethod = EnumToString.fromString(
-            CalculationMethod.values, underscore(params['method']));
-        final calculationParams = calculationMethod.getParameters();
-        calculationParams.madhab = madhab;
-        calculationParams.highLatitudeRule = highLatitudeRule;
-
-        // Get Coordinates
-        final coordinates =
-            Coordinates(params['latitude'], params['longitude']);
-        final locationTz = getLocation(params['timezone']);
-
-        times.forEach((time) {
-          final date = DateTime.tryParse(time['date']);
-          if (date != null) {
-            final prayerTimes = PrayerTimes(
-                coordinates, DateComponents.from(date), calculationParams);
-
-            final actualFajr = TZDateTime.from(prayerTimes.fajr, locationTz);
-            final actualSunrise =
-                TZDateTime.from(prayerTimes.sunrise, locationTz);
-            final actualDhuhr = TZDateTime.from(prayerTimes.dhuhr, locationTz);
-            final actualAsr = TZDateTime.from(prayerTimes.asr, locationTz);
-            final actualMaghrib =
-                TZDateTime.from(prayerTimes.maghrib, locationTz);
-            final actualIsha = TZDateTime.from(prayerTimes.isha, locationTz);
-
-            if (variance == null) {
-              expect(DateFormat.jm().format(actualFajr), time['fajr']);
-              expect(DateFormat.jm().format(actualSunrise), time['sunrise']);
-              expect(DateFormat.jm().format(actualDhuhr), time['dhuhr']);
-              expect(DateFormat.jm().format(actualAsr), time['asr']);
-              expect(DateFormat.jm().format(actualMaghrib), time['maghrib']);
-              expect(DateFormat.jm().format(actualIsha), time['isha']);
-            } else {
-              // Fajr
-              final expectedFajr = parseTzDateTimeWithoutEffect(
-                  'y-M-d h:m a', '${time['date']} ${time['fajr']}', locationTz);
-              expect(
-                  isTimesDifferenceWithinVarianceMinutes(
-                      actualFajr, expectedFajr, variance),
-                  isTrue);
-
-              // Sunrise
-              final expectedSunrise = parseTzDateTimeWithoutEffect(
-                  'y-M-d h:m a',
-                  '${time['date']} ${time['sunrise']}',
-                  locationTz);
-              expect(
-                  isTimesDifferenceWithinVarianceMinutes(
-                      actualSunrise, expectedSunrise, variance),
-                  isTrue);
-
-              // Dhuhr
-              final expectedDhuhr = parseTzDateTimeWithoutEffect('y-M-d h:m a',
-                  '${time['date']} ${time['dhuhr']}', locationTz);
-              expect(
-                  isTimesDifferenceWithinVarianceMinutes(
-                      actualDhuhr, expectedDhuhr, variance),
-                  isTrue);
-
-              // Asr
-              final expectedAsr = parseTzDateTimeWithoutEffect(
-                  'y-M-d h:m a', '${time['date']} ${time['asr']}', locationTz);
-              expect(
-                  isTimesDifferenceWithinVarianceMinutes(
-                      actualAsr, expectedAsr, variance),
-                  isTrue);
-
-              // Maghrib
-              final expectedMaghrib = parseTzDateTimeWithoutEffect(
-                  'y-M-d h:m a',
-                  '${time['date']} ${time['maghrib']}',
-                  locationTz);
-              expect(
-                  isTimesDifferenceWithinVarianceMinutes(
-                      actualMaghrib, expectedMaghrib, variance),
-                  isTrue);
-
-              // Isha
-              final expectedIsha = parseTzDateTimeWithoutEffect(
-                  'y-M-d h:m a', '${time['date']} ${time['isha']}', locationTz);
-              expect(
-                  isTimesDifferenceWithinVarianceMinutes(
-                      actualIsha, expectedIsha, variance),
-                  isTrue);
-            }
-          }
-        });
-      }
-    });
+  test('season day and leap year boundaries', () {
+    expect(PrayerTimes.daysSinceSolstice(1, 2016, 1), 11);
+    expect(PrayerTimes.daysSinceSolstice(366, 2016, 1), 10);
+    expect(PrayerTimes.daysSinceSolstice(356, 2016, 1), 0);
+    expect(PrayerTimes.daysSinceSolstice(173, 2016, -1), 0);
+    expect(PrayerTimes.daysSinceSolstice(172, 2015, -1), 0);
   });
-
-  test('Test PrayerTimes.currentPrayer', () {
-    final newYork = Coordinates(35.7750, -78.6336);
-    final prayerTimes = PrayerTimes.today(
-        newYork, CalculationMethod.north_america.getParameters());
-    expect(prayerTimes.currentPrayer() is Prayer, true);
-  });
-
-  test('Test PrayerTimes.nextPrayer', () {
-    final newYork = Coordinates(35.7750, -78.6336);
-    final prayerTimes = PrayerTimes.today(
-        newYork, CalculationMethod.north_america.getParameters());
-    expect(prayerTimes.nextPrayer() is Prayer, true);
-  });
-
-  test('Test PrayerTimes MOON_SIGHTING_COMMITTEE and Latitude Greater Than 55',
-      () {
-    final newYork = Coordinates(55.7750, -78.6336);
-    final prayerTimes = PrayerTimes.today(
-        newYork, CalculationMethod.moon_sighting_committee.getParameters());
-    print(prayerTimes.fajr);
-  });
-
-  test('Test PrayerTimes Invalid Coordinates', () {
-    final invalidCoordinates = Coordinates(90.7750, -78.6336);
-    expect(
-        () => PrayerTimes.today(
-            invalidCoordinates, CalculationMethod.karachi.getParameters()),
-        throwsArgumentError);
-  });
-
-  test('Test PrayerTimes.daysSinceSolstice', () {
-    _daysSinceSolsticeTest(
-        11, /* year */ 2016, /* month */ 1, /* day */ 1, /* latitude */ 1);
-    _daysSinceSolsticeTest(
-        10, /* year */ 2015, /* month */ 12, /* day */ 31, /* latitude */ 1);
-    _daysSinceSolsticeTest(
-        10, /* year */ 2016, /* month */ 12, /* day */ 31, /* latitude */ 1);
-    _daysSinceSolsticeTest(
-        0, /* year */ 2016, /* month */ 12, /* day */ 21, /* latitude */ 1);
-    _daysSinceSolsticeTest(
-        1, /* year */ 2016, /* month */ 12, /* day */ 22, /* latitude */ 1);
-    _daysSinceSolsticeTest(
-        71, /* year */ 2016, /* month */ 3, /* day */ 1, /* latitude */ 1);
-    _daysSinceSolsticeTest(
-        70, /* year */ 2015, /* month */ 3, /* day */ 1, /* latitude */ 1);
-    _daysSinceSolsticeTest(
-        365, /* year */ 2016, /* month */ 12, /* day */ 20, /* latitude */ 1);
-    _daysSinceSolsticeTest(
-        364, /* year */ 2015, /* month */ 12, /* day */ 20, /* latitude */ 1);
-
-    _daysSinceSolsticeTest(
-        0, /* year */ 2015, /* month */ 6, /* day */ 21, /* latitude */ -1);
-    _daysSinceSolsticeTest(
-        0, /* year */ 2016, /* month */ 6, /* day */ 21, /* latitude */ -1);
-    _daysSinceSolsticeTest(
-        364, /* year */ 2015, /* month */ 6, /* day */ 20, /* latitude */ -1);
-    _daysSinceSolsticeTest(
-        365, /* year */ 2016, /* month */ 6, /* day */ 20, /* latitude */ -1);
-  });
-}
-
-void _daysSinceSolsticeTest(
-    int value, int year, int month, int day, double latitude) {
-  // For Northern Hemisphere start from December 21
-  // (DYY=0 for December 21, and counting forward, DYY=11 for January 1 and so on).
-  // For Southern Hemisphere start from June 21
-  // (DYY=0 for June 21, and counting forward)
-  final date = CalendarUtil.resolveTime(year, month, day);
-  expect(PrayerTimes.daysSinceSolstice(date.dayOfYear, date.year, latitude),
-      value);
-}
-
-TZDateTime parseTzDateTimeWithoutEffect(
-    String formatPattern, String formattedDateTimeString, Location locationTz) {
-  final dateTimeObject =
-      DateFormat(formatPattern).parse(formattedDateTimeString);
-  return TZDateTime(
-      locationTz,
-      dateTimeObject.year,
-      dateTimeObject.month,
-      dateTimeObject.day,
-      dateTimeObject.hour,
-      dateTimeObject.minute,
-      dateTimeObject.second);
-}
-
-bool isTimesDifferenceWithinVarianceMinutes(
-    TZDateTime time1, TZDateTime time2, int variance) {
-  return time1.difference(time2).inMinutes <= variance &&
-      (variance * -1) <= time1.difference(time2).inMinutes;
 }
