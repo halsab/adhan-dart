@@ -68,7 +68,12 @@ void main(List<String> args) {
           (night['lastThird'] as num)).abs();
       if (middleDelta > tolerance || lastDelta > tolerance) fail('night milestone mismatch');
     } else if ((night == null) != (calculatedNight == null)) {
-      fail('night milestone validity mismatch');
+      final nextDate = date.addDays(1);
+      final next = PrayerTimes.tryCalculate(coordinates, nextDate, params);
+      fail('night milestone validity mismatch: reference=$night, '
+          'actual=${calculatedNight?.middleOfTheNight}, '
+          'todayMaghrib=${result.maghrib}, todayIsha=${result.isha}, '
+          'nextFajr=${next?.fajr}, nextResolution=${next?.appliedPolarResolution}');
     }
   }
   stdout.writeln('${data.length} scenarios, $checked event comparisons, $failures mismatches');

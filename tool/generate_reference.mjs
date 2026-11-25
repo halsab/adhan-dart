@@ -18,6 +18,8 @@ const methods = ['MuslimWorldLeague', 'Egyptian', 'Karachi', 'UmmAlQura',
   'Qatar', 'Singapore', 'Turkey', 'Tehran', 'Other'];
 const events = ['fajr', 'sunrise', 'dhuhr', 'asr', 'sunset', 'maghrib', 'isha'];
 const records = [];
+const prayerOrder = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'];
+const isOrdered = t => t.isValid && prayerOrder.every((key, i) => i === 0 || t[key] > t[prayerOrder[i - 1]]);
 const normalize = s => s.replaceAll('_', '').toLowerCase();
 for (const [lat, lon] of locations) {
   for (const date of dates) {
@@ -54,14 +56,18 @@ for (const [lat, lon] of locations) {
           };
           if (times.isValid) {
             // Dart intentionally rejects inverted final adjusted times.
-            const order = ['fajr','sunrise','dhuhr','asr','maghrib','isha'];
-            if (order.every((key, i) => i === 0 || times[key] > times[order[i-1]])) {
+            if (isOrdered(times)) {
               record.times = Object.fromEntries(events.map(k => [k, +times[k]]));
               const n = new SunnahTimes(times);
               const nextDate = new Date(date + 'T00:00:00Z');
               nextDate.setUTCDate(nextDate.getUTCDate() + 1);
               const next = new PrayerTimes(c, nextDate, p);
-              if (n.isValid && next.isValid && next.fajr > times.isha &&
+              // The next day must satisfy the same final ordering rule as
+              // the requested day. JS validity alone checks raw geometry.
+              if (next.isValid && !isOrdered(next)) {
+                console.log('Next-day adjustment conflict', {lat, lon, date, method, madhab, variant: v, next: Object.fromEntries(prayerOrder.map(k => [k, next[k].toISOString()]))});
+              }
+              if (n.isValid && isOrdered(next) && next.fajr > times.isha &&
                   next.fajr - times.maghrib < 86400000 &&
                   n.middleOfTheNight > times.maghrib &&
                   n.lastThirdOfTheNight > n.middleOfTheNight &&
