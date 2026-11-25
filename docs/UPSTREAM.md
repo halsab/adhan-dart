@@ -52,7 +52,11 @@ new Codeberg repository has not been checked.
 5. Reject invalid night intervals, including next Fajr not after today's Isha.
 6. Reject nonfinite/out-of-range coordinates and invalid Gregorian dates.
    Limit individual offsets to one day to avoid unbounded arithmetic.
-7. API compatibility is not required for v3. Keep familiar preset names and
+7. Only the next day's sunrise is required for the current night's duration.
+   The Swift reference's failable next-day SolarTime also requires its sunset,
+   incorrectly rejecting a day adjacent to the start of midnight sun. Dart
+   follows JS here and does not impose the extra sunset prerequisite.
+8. API compatibility is not required for v3. Keep familiar preset names and
    package import, but prefer immutable data, typed failures and explicit date.
 
 ## Verification gates
@@ -82,13 +86,19 @@ new Codeberg repository has not been checked.
   Qibla; use a one-second limit on prayer instants and a two-second bound
   on night milestones because Swift truncates both input event fractions and
   the final milestone to whole seconds. Also compare next-day Fajr directly.
+  Execute and report the unmodified Swift baseline, then rerun after a single
+  test-only dependency correction to its following-day sunrise calculation.
+  The normalized Swift comparison remains a mandatory gate. The discrepancy
+  was observed at 78.2232°N, 15.6469°E for 2025-04-26: Dart selected 2025-04-16,
+  while the extra tomorrow-sunset requirement moves Swift to an earlier date.
+  Independently verify the candidate and following day with JPL DE440s.
 - Direct Kotlin comparison: restrict the same input matrix to the 1,296
   common-feature scenarios at |latitude| <=40°, no polar substitution,
   no elevation and no Tehran. The old solver and 0h-UT Asr declination
   differ by design; limit differences to 90 seconds for Asr and 20 seconds
   for other events and night milestones. These bounds reflect the older
   model's known numerical limitations, not a relaxation of JS/Swift parity.
-- Independent JPL DE440s benchmark: 86 solar days, eight raw solar events
+- Independent JPL DE440s benchmark: 88 solar days, eight raw solar events
   each, both Asr shadow ratios, polar unreachable events and two
   near-culmination cases. Use Skyfield's apparent geocentric solar
   coordinates, matching the geometric conventions, and independent bisection.

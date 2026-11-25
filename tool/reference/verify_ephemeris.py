@@ -95,14 +95,16 @@ for row in rows:
 
     expected = {
         "transit": transit,
-        "sunrise": angle_time(-50 / 60, False),
-        "sunset": angle_time(-50 / 60, True),
+        "sunrise": angle_time(-50 / 60 - 0.035333 * math.sqrt(max(0, row["east"])), False),
+        "sunset": angle_time(-50 / 60 - 0.035333 * math.sqrt(max(0, row["west"])), True),
         "fajr18": angle_time(-18, False),
         "isha17": angle_time(-17, True),
         "isha18": angle_time(-18, True),
         "asr1": asr(1),
         "asr2": asr(2),
     }
+    if row["west"] != 0:
+        print(f"Polar-boundary oracle {label}: sunrise={expected['sunrise']}, sunset={expected['sunset']}")
     for name, target in expected.items():
         actual = row["hours"][name]
         if (target is None) != (actual is None):

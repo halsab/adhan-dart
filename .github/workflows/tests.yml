@@ -77,7 +77,7 @@ jobs:
       - run: dart pub get
       - run: dart run tool/verify_reference.dart /tmp/reference-results.json
 
-  cross-port:
+  swift-reference:
     runs-on: ubuntu-latest
     env:
       TZ: UTC
@@ -94,26 +94,40 @@ jobs:
           ref: 96998baa08d697cbc7b471ebad3749f689550b74
           path: .reference/adhan-swift
           persist-credentials: false
-      - name: Direct Swift comparison
+      - name: Unmodified Swift baseline
         run: |
           swift --version
           cp tool/reference/swift_main.swift "$RUNNER_TEMP/main.swift"
-          swiftc -O $(find .reference/adhan-swift/Sources -name '*.swift' | sort) "$RUNNER_TEMP/main.swift" -o "$RUNNER_TEMP/swift-parity"
+          swiftc -O $(find .reference/adhan-swift/Sources -name '*.swift' | sort) "$RUNNER_TEMP/main.swift" -o "$RUNNER_TEMP/swift-baseline"
+          "$RUNNER_TEMP/swift-baseline" "$RUNNER_TEMP/cross-port.json" --baseline
+      - name: Strict Swift comparison with documented dependency correction
+        run: |
+          python3 tool/reference/patch_swift_reference.py .reference/adhan-swift
+          swiftc -O $(find .reference/adhan-swift/Sources -name '*.swift' | sort) tool/reference/swift_sunrise_only.swift "$RUNNER_TEMP/main.swift" -o "$RUNNER_TEMP/swift-parity"
           "$RUNNER_TEMP/swift-parity" "$RUNNER_TEMP/cross-port.json"
+
+  kotlin-reference:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    steps:
       - uses: actions/checkout@v7.0.1
-        if: always() && !cancelled()
+      - uses: dart-lang/setup-dart@v1.8.2
+        with:
+          sdk: stable
+      - run: dart pub get
+      - run: dart run tool/generate_cross_port_cases.dart "$RUNNER_TEMP/cross-port.json"
+      - uses: actions/checkout@v7.0.1
         with:
           repository: batoulapps/adhan-kotlin
           ref: a39517d0aafb95addef28956d96e5823b3aea1cc
           path: .reference/adhan-kotlin
           persist-credentials: false
       - uses: actions/setup-java@v6.3.0
-        if: always() && !cancelled()
         with:
           java-version: '21'
           distribution: zulu
       - name: Direct Kotlin comparison
-        if: always() && !cancelled()
         run: |
           cp tool/reference/KotlinParityTest.kt .reference/adhan-kotlin/adhan/src/jvmTest/kotlin/com/batoulapps/adhan2/
           cd .reference/adhan-kotlin

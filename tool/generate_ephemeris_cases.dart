@@ -22,8 +22,8 @@ void main(List<String> args) {
     DateTime.utc(2026, 12, 21), DateTime.utc(2030, 12, 31),
   ];
   final rows = <Map<String, Object?>>[];
-  void add(Coordinates coords, DateTime date) {
-    final solar = SolarTime(date, coords);
+  void add(Coordinates coords, DateTime date, {double east = 0, double west = 0}) {
+    final solar = SolarTime(date, coords, sunriseElevation: east, sunsetElevation: west);
     final values = {
       'transit': solar.transit,
       'sunrise': solar.sunrise,
@@ -37,6 +37,7 @@ void main(List<String> args) {
     rows.add({
       'latitude': coords.latitude, 'longitude': coords.longitude,
       'year': date.year, 'month': date.month, 'day': date.day,
+      'east': east, 'west': west,
       'hours': values.map((key, value) => MapEntry(key, value.isFinite ? value : null)),
     });
   }
@@ -48,6 +49,10 @@ void main(List<String> args) {
   // Near-lower-culmination cases originally identified using JPL DE440.
   add(Coordinates(61.2181, -149.9003), DateTime.utc(2024, 8, 25));
   add(Coordinates(55.8642, -4.2518), DateTime.utc(2028, 8, 9));
+  // Aqrab Yaum boundary: the following sunrise exists even though its
+  // sunset is absent. The following sunset is not required to compute night.
+  add(Coordinates(78.2232, 15.6469), DateTime.utc(2025, 4, 16), west: 100);
+  add(Coordinates(78.2232, 15.6469), DateTime.utc(2025, 4, 17), west: 100);
   File(args.single).writeAsStringSync(jsonEncode(rows));
   stdout.writeln('Generated ${rows.length} raw solar geometry scenarios');
 }

@@ -48,6 +48,24 @@ void main() {
     }
   });
 
+  test('next-day sunset is not a dependency of the current night length', () {
+    final c = Coordinates(78.2232, 15.6469);
+    final today = DateComponents(2025, 4, 16);
+    final tomorrow = SolarTime(today.addDays(1).toUtcMidnight(), c,
+        sunsetElevation: 100);
+    expect(tomorrow.sunrise.isFinite, isTrue);
+    expect(tomorrow.sunset.isNaN, isTrue);
+    final p = CalculationMethod.muslim_world_league.getParameters().copyWith(
+        rounding: Rounding.none,
+        highLatitudeRule: HighLatitudeRule.twilight_angle,
+        elevationFromHorizon: const ElevationFromHorizon.separate(sunrise: 0, sunset: 100),
+        polarCircleResolution: PolarCircleResolution.unresolved);
+    expect(PrayerTimes.tryCalculate(c, today, p), isNotNull);
+    final substituted = PrayerTimes(c, DateComponents(2025, 4, 26),
+        p.copyWith(polarCircleResolution: PolarCircleResolution.aqrabYaum));
+    expect(substituted.calculationDate, today);
+  });
+
   test('unreachable solar altitude remains unresolved', () {
     final solar = SolarTime(DateTime.utc(2015, 7, 12), Coordinates(35.78333, -78.65));
     expect(solar.hourAngle(-36, true).isNaN, isTrue);

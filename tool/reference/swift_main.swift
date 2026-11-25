@@ -86,4 +86,6 @@ for row in rows {
 }
 print("Failure categories: \(failuresByKind)")
 print("Swift: \(rows.count) scenarios, \(comparisons) instant comparisons, max error \(maxError) ms, \(failures) mismatches")
-if failures > 0 { exit(1) }
+if CommandLine.arguments.contains("--baseline") {
+    print("Unmodified Swift baseline; differences are reported, not treated as normalized parity")
+} else if failures > 0 { exit(1) }
