@@ -20,3 +20,7 @@ doc/api/
 
 # IDE related directories
 /.idea/
+
+# Locally built pinned reference and generated comparison output.
+.reference/
+reference-results.json

@@ -51,9 +51,8 @@ void main(List<String> args) {
     final actual = {'fajr': result.fajr, 'sunrise': result.sunrise,
       'dhuhr': result.dhuhr, 'asr': result.asr, 'sunset': result.sunset,
       'maghrib': result.maghrib, 'isha': result.isha};
-    // Integer-second conversion and cross-runtime floating-point differences
-    // may move a near-boundary rounded event by one minute. For unrounded
-    // results the tolerance is one second; rounded output must match exactly.
+    // Compare rounded schedules exactly; investigate any one-minute boundary
+    // mismatch instead of hiding it. Unrounded results tolerate one second.
     final tolerance = params.rounding == Rounding.none ? 1000 : 0;
     for (final entry in actual.entries) {
       final delta = (entry.value.millisecondsSinceEpoch - (expected[entry.key] as num)).abs();
@@ -68,10 +67,8 @@ void main(List<String> args) {
       final lastDelta = (calculatedNight.lastThirdOfTheNight.millisecondsSinceEpoch -
           (night['lastThird'] as num)).abs();
       if (middleDelta > tolerance || lastDelta > tolerance) fail('night milestone mismatch');
-    } else if (night != null && calculatedNight == null) {
-      // Dart explicitly rejects physically invalid night intervals. Do not
-      // treat a missing expected-valid night as a silent success.
-      fail('night milestone unavailable');
+    } else if ((night == null) != (calculatedNight == null)) {
+      fail('night milestone validity mismatch');
     }
   }
   stdout.writeln('${data.length} scenarios, $checked event comparisons, $failures mismatches');

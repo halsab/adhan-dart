@@ -20,13 +20,15 @@ final class SunnahTimes {
     final tomorrow = PrayerTimes(today.coordinates,
         today.dateComponents.addDays(1), today.calculationParameters);
     final night = tomorrow.fajr.difference(today.maghrib);
-    if (night <= Duration.zero || night >= const Duration(days: 1)) {
+    if (night <= Duration.zero || night >= const Duration(days: 1) ||
+        !tomorrow.fajr.isAfter(today.isha)) {
       throw const PrayerTimeCalculationException(
           CalculationFailure.invalidNight, 'Invalid Maghrib-to-Fajr interval');
     }
     DateTime milestone(double portion) => CalendarUtil.roundedMinute(
-        today.maghrib.add(Duration(milliseconds:
-            (night.inMilliseconds * portion).truncate())),
+        DateTime.fromMillisecondsSinceEpoch(
+            (today.maghrib.millisecondsSinceEpoch + night.inMilliseconds * portion).truncate(),
+            isUtc: true),
         today.calculationParameters.rounding);
     final middle = milestone(0.5);
     final lastThird = milestone(2 / 3);

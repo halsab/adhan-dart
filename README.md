@@ -1,216 +1,136 @@
-# Adhan Dart / Flutter
-[![Pub](https://img.shields.io/pub/v/adhan?include_prereleases)](https://pub.dev/packages/adhan/versions/2.0.0-nullsafety.1)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/iamriajul/adhan-dart/tests.yml?branch=master)](https://github.com/iamriajul/adhan-dart/actions?query=branch:v2)
-[![codecov](https://codecov.io/gh/iamriajul/adhan-dart/branch/v2/graph/badge.svg)](https://codecov.io/gh/iamriajul/adhan-dart/branch/v2)
-[![GitHub issues](https://img.shields.io/github/issues/iamriajul/adhan-dart)][tracker]
-[![Star on GitHub](https://img.shields.io/github/stars/iamriajul/adhan-dart.svg?style=flat&logo=github&colorB=deeppink&label=stars)][repo]
-[![GitHub top language](https://img.shields.io/github/languages/top/iamriajul/adhan-dart)][repo]
-[![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/iamriajul/adhan-dart/tree/v2)
-[![License: MIT](https://img.shields.io/badge/license-MIT-purple.svg)](https://github.com/iamriajul/adhan-dart/blob/master/LICENSE)
+# Adhan Dart
 
-[repo]: https://github.com/iamriajul/adhan-dart
+An offline prayer-time calculation library for Dart and Flutter. This fork is a
+pure Dart port of the current Adhan algorithms, with no runtime package
+dependencies, native bindings, network access, or device timezone dependency.
 
-Adhan Dart is a well tested and well documented library for calculating Islamic prayer times. Adhan Dart is written to
-be compatible with Dart and Dart Native / Flutter / Android / iOS / Web etc... devices of all api versions. It has a
-small method overhead, and has no external dependencies.
-
-All astronomical calculations are high precision equations directly from the
-book [“Astronomical Algorithms” by Jean Meeus](https://www.willbell.com/math/mc1.htm). This book is recommended by the
-Astronomical Applications Department of the U.S. Naval Observatory and the Earth System Research Laboratory of the
-National Oceanic and Atmospheric Administration.
-
-Implementations of Adhan in other languages can be found in the parent repo [Adhan](https://github.com/batoulapps/Adhan)
-.
+**Development version.** The 3.0.0-dev.1 branch is not a production release.
+Passing CI, differential tests and review are required before tagging a stable
+release. See [upstream and verification notes](docs/UPSTREAM.md).
 
 ## Usage
 
-A simple usage example:
+Requires Dart 3.10 or later. Add this repository as a Git dependency, pinning an
+approved commit or release tag. Package imports remain `package:adhan/adhan.dart`.
 
 ```dart
 import 'package:adhan/adhan.dart';
 
-main() {
-  print('My Prayer Times');
-  final myCoordinates = Coordinates(23.9088, 89.1220); // Replace with your own location lat, lng.
-  final params = CalculationMethod.karachi.getParameters();
-  params.madhab = Madhab.hanafi;
-  final prayerTimes = PrayerTimes.today(myCoordinates, params);
+final coordinates = Coordinates(52.2297, 21.0122);
+final date = DateComponents(2026, 6, 21); // civil date at target location
+final parameters = CalculationMethod.muslim_world_league.getParameters()
+    .copyWith(
+      madhab: Madhab.hanafi,
+      highLatitudeRule: HighLatitudeRule.automatic,
+    );
 
-  print("---Today's Prayer Times in Your Local Timezone(${prayerTimes.fajr.timeZoneName})---");
-  print(DateFormat.jm().format(prayerTimes.fajr));
-  print(DateFormat.jm().format(prayerTimes.sunrise));
-  print(DateFormat.jm().format(prayerTimes.dhuhr));
-  print(DateFormat.jm().format(prayerTimes.asr));
-  print(DateFormat.jm().format(prayerTimes.maghrib));
-  print(DateFormat.jm().format(prayerTimes.isha));
+final times = PrayerTimes(coordinates, date, parameters);
+print(times.fajr.toIso8601String()); // absolute UTC instant
+print(times.asr);
+print(times.isApproximate);
+print(Qibla(coordinates).direction); // true-north bearing
 
-  print('---');
-
-  // Custom Timezone Usage. (Most of you won't need this).
-  print('NewYork Prayer Times');
-  final newYork = Coordinates(35.7750, -78.6336);
-  final nyUtcOffset = Duration(hours: -4);
-  final nyDate = DateComponents(2015, 7, 12);
-  final nyParams = CalculationMethod.north_america.getParameters();
-  nyParams.madhab = Madhab.hanafi;
-  final nyPrayerTimes = PrayerTimes(newYork, nyDate, nyParams, utcOffset: nyUtcOffset);
-
-  print(nyPrayerTimes.fajr.timeZoneName);
-  print(DateFormat.jm().format(nyPrayerTimes.fajr));
-  print(DateFormat.jm().format(nyPrayerTimes.sunrise));
-  print(DateFormat.jm().format(nyPrayerTimes.dhuhr));
-  print(DateFormat.jm().format(nyPrayerTimes.asr));
-  print(DateFormat.jm().format(nyPrayerTimes.maghrib));
-  print(DateFormat.jm().format(nyPrayerTimes.isha));
-}
-```
-##### See [Flutter Example](https://github.com/iamriajul/adhan-dart/tree/master/example/adhan_example_flutter_app) Folder for Flutter Usage Example with Dynamic Location From GPS.
-
-also, you can run `pub run adhan` to test quickly based on Hanafi, Karachi parameters.
-*alternatively, without installing in project, you can run `pub global activate adhan` and then run `pub global run adhan` to test quickly.
-
-### Initialization parameters
-
-#### Coordinates
-
-Create a `Coordinates` object with the latitude and longitude for the location you want prayer times for.
-
-```dart
-final coordinates = new Coordinates(35.78056, -78.6389);
-
-/// Coordinates Validation Support [Optional],
-/// to Support validation, use [validate: true] param, default: false
-
-final validateTrue = new Coordinates(91.78056, -78.6389, validate: true); // Invalid Coordinates, will throw ArgumentError
-
-final validateFalse = new Coordinates(91.78056, -78.6389, validate: false); // Invalid Coordinates, won't throw ArgumentError
+final night = SunnahTimes.tryCalculate(times);
+final schedule = PrayerSchedule(times);
 ```
 
-#### Date
+Use `DateComponents.from(targetLocalDateTime)` or explicit year/month/day.
+**Never add a UTC offset to a prayer time and then treat it as an absolute
+instant.** A device's local timezone can differ from the target location.
+An app can use an IANA timezone database (for example, the Dart timezone
+package) to obtain the civil date and format the UTC results. This library
+intentionally does not contain timezone lookup or DST rules.
 
-The date parameter passed in should be an instance of the `DateComponents` object. The year, month, and day values need to be populated. All other values will be ignored. The year, month and day values should be for the  local date that you want prayer times for. These date values are expected to be for the Gregorian calendar. There's also a convenience method for converting a `DateTime` to `DateComponents`.
+## Calculation options
 
-```dart
-final date = DateComponents(2015, 11, 1);
-// or
-final date = DateComponents.from(DateTime.now());
+| Setting | Behavior |
+| --- | --- |
+| `CalculationMethod` | MWL, Egyptian, Karachi, Umm al-Qura, Dubai, Moonsighting Committee, North America, Kuwait, Qatar, Singapore, Turkey (approximation), Tehran, Other/custom |
+| `Madhab` | Shafi (single shadow) or Hanafi (double shadow) for Asr |
+| `HighLatitudeRule` | Middle of night, seventh of night, twilight angle, or automatic (absolute latitude >48° selects seventh) |
+| `PolarCircleResolution` | Aqrab Balad (default), Aqrab Yaum, or unresolved |
+| `Shafaq` | General, Ahmer or Abyad for Moonsighting Committee |
+| `Rounding` | Nearest minute, up to the next minute, none; Singapore defaults to up |
+| `ElevationFromHorizon` | Height above the visible astronomical horizon in meters, separate east/west values supported |
+| `PrayerAdjustments` | Independent signed minute adjustments, applied once after raw calculation |
+| `maghribAngle` | Optional twilight angle; Tehran preset uses 4.5° |
+| `ishaInterval` | Fixed interval after raw sunset; takes precedence over the Isha angle |
+
+The default high-latitude rule matches Adhan JS (middle of night); automatic
+selection is opt-in. The northern >=55° Moonsighting Committee special case
+retains upstream behavior. These conventions are not a determination of the
+religiously correct rule for every location. The caller selects suitable
+parameters, and may apply local authority guidance. Ramadan adjustments (e.g.
+the additional 30 minutes for Umm al-Qura Isha) must be configured explicitly.
+
+Horizon elevation is **not GPS altitude above sea level**. Only provide
+known height above the relevant horizon. For a city on a plateau the usual
+value is zero. Negative values are treated as zero.
+
+## Results and failures
+
+- `PrayerTimes` contains Fajr, sunrise, Dhuhr, Asr, physical sunset, Maghrib,
+  and Isha as UTC DateTime values.
+- `fajrSource`, `ishaSource`, `maghribSource`, `calculationCoordinates`,
+  `calculationDate`, and `appliedPolarResolution` describe calculation
+  substitutions. `isApproximate` flags twilight/angle and polar substitutions.
+- Aqrab Balad searches in half-degree steps toward the equator at the original
+  longitude. Aqrab Yaum searches forward/backward by day, preferring forward on
+  ties, up to 183 days each way, and relabels the result to the requested date.
+- If the result cannot be computed, the constructor throws
+  `PrayerTimeCalculationException` with a reason. `tryCalculate` returns null
+  on calculation failures. Invalid inputs throw `ArgumentError`.
+- Raw prayer events must be at least five minutes apart, matching upstream
+  geometry checks. Final adjusted prayer events must be strictly increasing.
+  Invalid adjustments never trigger polar substitution.
+- Coordinates must be finite and in [-90,90] and [-180,180]; Gregorian dates
+  must be valid with years 1–9999. This range is input validation, not a claim
+  of ephemeris accuracy throughout that period.
+- Angles must be finite and 0–90°, fixed interval 0–1439 minutes, per-event
+  offsets -1440–1440 minutes per adjustment set.
+- Night milestones are the midpoint and beginning of the last third of the
+  Maghrib-to-next-Fajr interval. They can be unavailable independently of the
+  day. Invalid or overlapping next-day intervals fail explicitly.
+- `PrayerSchedule` adds sorted auxiliary events without treating them as
+  obligatory prayers. `currentPrayer`/ `nextPrayer` on PrayerTimes are
+  daily event helpers, not a ruling about prayer validity windows. Sunrise
+  is a boundary/event, not a prayer. Schedule currentPrayer covers the
+  requested schedule through its next-Fajr boundary only.
+- `Qibla` is a great-circle initial bearing relative to true north, not a
+  magnetic compass correction. At the Kaaba itself and its antipode no
+  unique initial bearing exists; callers must handle that degenerate case.
+
+## Persist settings
+
+`parameters.toJson()` produces schema version 1. Restore using
+`CalculationParametersSerialization.fromJson(map)`. All fields are explicit,
+including preset and manual adjustments. Malformed or unsupported settings are
+rejected rather than silently substituted.
+
+## Migration from v2
+
+This is a breaking release. Parameter and adjustment fields are immutable; use
+`copyWith`. Dates and coordinates validate eagerly. Output is always UTC.
+The old `utcOffset` option/factory was removed; `PrayerTimes.today` requires
+explicit target-local date fields. The deprecated Flutter demo was replaced
+with a standalone Dart example. Old generated-v1 timing files are retained as
+historical artifacts, not accuracy oracles for changed algorithms.
+
+## Verification
+
+```sh
+dart pub get
+dart analyze
+dart test
+dart test -p chrome --compiler dart2js test/src
+dart test -p chrome --compiler dart2wasm test/src
 ```
 
-#### Calculation parameters
+The GitHub Actions workflow additionally generates reference schedules from
+the pinned Adhan JS commit and compares them with Dart. The library uses no
+JavaScript at runtime; Node is needed only for this development check.
 
-The rest of the needed information is contained within the `CalculationParameters` class. Instead of manually initializing this class, it is recommended to use one of the pre-populated instances in the `CalculationMethod` class. You can then further customize the calculation parameters if needed.
+## License
 
-```dart
-final params = CalculationMethod.muslim_world_league.getParameters();
-params.madhab = Madhab.hanafi;
-params.adjustments.fajr = 2;
-```
-
-| Parameter | Description |
-| --------- | ----------- |
-| `method`    | CalculationMethod name |
-| `fajrAngle` | Angle of the sun used to calculate Fajr |
-| `maghribAngle` | The angle of the sun used to calculate Maghrib |
-| `ishaAngle` | Angle of the sun used to calculate Isha |
-| `ishaInterval` | Minutes after Maghrib (if set, the time for Isha will be Maghrib plus ishaInterval) |
-| `madhab` | Value from the Madhab object, used to calculate Asr |
-| `highLatitudeRule` | Value from the HighLatitudeRule object, used to set a minimum time for Fajr and a max time for Isha |
-| `adjustments` | `PrayerAdjustments` object with custom prayer time adjustments in minutes for each prayer time |
-
-**CalculationMethod**
-
-| Value | Description |
-| ----- | ----------- |
-| `muslim_world_league` | Muslim World League. Fajr angle: 18, Isha angle: 17 |
-| `egyptian` | Egyptian General Authority of Survey. Fajr angle: 19.5, Isha angle: 17.5 |
-| `karachi` | University of Islamic Sciences, Karachi. Fajr angle: 18, Isha angle: 18 |
-| `umm_al_qura` | Umm al-Qura University, Makkah. Fajr angle: 18, Isha interval: 90. *Note: you should add a +30 minute custom adjustment for Isha during Ramadan.* |
-| `dubai` | Method used in UAE. Fajr and Isha angles of 18.2 degrees. |
-| `qatar` | Modified version of Umm al-Qura used in Qatar. Fajr angle: 18, Isha interval: 90. |
-| `kuwait` | Method used by the country of Kuwait. Fajr angle: 18, Isha angle: 17.5 |
-| `moonsighting_committee` | Moonsighting Committee. Fajr angle: 18, Isha angle: 18. Also uses seasonal adjustment values. |
-| `singapore` | Method used by Singapore. Fajr angle: 20, Isha angle: 18. |
-| `north_america` | Referred to as the ISNA method. This method is included for completeness but is not recommended. Fajr angle: 15, Isha angle: 15 |
-| `turkey` | Turkey. Fajr angle: 18, Isha angle: 17 |
-| `tehran` | Tehran. Fajr angle: 17.7, Isha angle: 14, Maghrib Angle: 4.5 |
-| `other` | Fajr angle: 0, Isha angle: 0. This is the default value for `method` when initializing a `CalculationParameters` object. |
-
-**Madhab**
-
-| Value | Description |
-| ----- | ----------- |
-| `shafi` | Earlier Asr time |
-| `hanafi` | Later Asr time |
-
-**HighLatitudeRule**
-
-| Value | Description |
-| ----- | ----------- |
-| `middle_of_the_night` | Fajr will never be earlier than the middle of the night and Isha will never be later than the middle of the night |
-| `seventh_of_the_night` | Fajr will never be earlier than the beginning of the last seventh of the night and Isha will never be later than the end of the first seventh of the night |
-| `twilight_angle` | Similar to `SEVENTH_OF_THE_NIGHT`, but instead of 1/7, the fraction of the night used is fajrAngle/60 and ishaAngle/60 |
-
-
-### Prayer Times
-
-Once the `PrayerTimes` object has been initialized it will contain values for all five prayer times and the time for sunrise. The prayer times will be DateTime object instances initialized with Local values (converted from UTC via .toLocal method). To display these times for a different timezone than local a UTC Offset should be used, for example `Duration`.
-
-```dart
-final kushtiaUtcOffset = Duration(hours: 6);
-final newYorkUtcOffset = Duration(hours: -4);
-// then pass your offset to PrayerTimes like this:
-final prayerTimes = PrayerTimes(coordinates, date, params, utcOffset: newYorkUtcOffset);
-```
-
-
-**Methods**
-
-| name | return |
-| ----- | ----------- |
-| `timeForPrayer` | DateTime instance |
-| `currentPrayer` | Prayer enum instance |
-| `currentPrayerByDateTime` | Prayer enum instance |
-| `nextPrayer` | Prayer enum instance |
-| `nextPrayerByDateTime` | Prayer enum instance |
-
-### Sunnah Times
-
-```dart
-final prayerTimes = PrayerTimes(coordinates, date, params, utcOffset: newYorkUtcOffset);
-final sunnahTimes = SunnahTimes(prayerTimes);
-// and then access
-/// The midpoint between Maghrib and Fajr
-sunnahTimes.middleOfTheNight
-/// The beginning of the last third of the period between Maghrib and Fajr,
-/// a recommended time to perform Qiyam
-sunnahTimes.lastThirdOfTheNight
-```
-
-### Qibla
-
-```dart
-final qibla = Qibla(coordinates);
-/// Qibla direction degree (Compass/Clockwise)
-qibla.direction
-```
-
-## Features and bugs
-
-Please file feature requests and bugs at the [issue tracker][tracker].
-
-[tracker]: https://github.com/iamriajul/adhan-dart/issues
-
-## Inspired / Adopted From
-
-- [adhan-java](https://github.com/batoulapps/adhan-java/blob/master/README.md)
-
-# Adhan Java
-
-Adhan Java is a well tested and well documented library for calculating Islamic prayer times. Adhan Java is written to be compatible with Java and Android devices of all api versions. It compiles against Java 7 to ensure compatibility with Android. It has a small method overhead, and has no external dependencies.
-
-All astronomical calculations are high precision equations directly from the book [“Astronomical Algorithms” by Jean Meeus](https://www.willbell.com/math/mc1.htm). This book is recommended by the Astronomical Applications Department of the U.S. Naval Observatory and the Earth System Research Laboratory of the National Oceanic and Atmospheric Administration.
-
-Implementations of Adhan in other languages can be found in the [Adhan](https://github.com/batoulapps/Adhan) repo.
-
-![Alt](https://repobeats.axiom.co/api/embed/e8675b24cea4b3ca1f0359e428a0457d259994a1.svg "Repobeats analytics image")
-
+MIT. Copyright notices for the original Dart library and Batoul Apps are
+preserved in [LICENSE](LICENSE). See [upstream notes](docs/UPSTREAM.md).

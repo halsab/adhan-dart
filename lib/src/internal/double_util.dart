@@ -11,6 +11,6 @@ class DoubleUtil {
     if (angle >= -180 && angle <= 180) {
       return angle;
     }
-    return angle - (360 * (angle / 360).roundToDouble());
+    return angle - (360 * (angle / 360 + 0.5).floorToDouble());
   }
 }

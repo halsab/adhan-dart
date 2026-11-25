@@ -34,8 +34,10 @@ final class PrayerTimes {
   DateTime get isha => _times.isha;
   PrayerTimeSource get fajrSource => _times.fajrSource;
   PrayerTimeSource get ishaSource => _times.ishaSource;
+  PrayerTimeSource get maghribSource => _times.maghribSource;
   bool get usedPolarResolution => appliedPolarResolution != null;
   bool get isApproximate => usedPolarResolution ||
+      maghribSource == PrayerTimeSource.sunsetFallback ||
       fajrSource == PrayerTimeSource.nightPortion ||
       fajrSource == PrayerTimeSource.seasonalTwilight ||
       ishaSource == PrayerTimeSource.nightPortion ||
@@ -177,16 +179,17 @@ bool _ordered(List<DateTime> times,
 
 final class _DayTimes {
   final DateTime fajr, sunrise, dhuhr, asr, sunset, maghrib, isha;
-  final PrayerTimeSource fajrSource, ishaSource;
+  final PrayerTimeSource fajrSource, ishaSource, maghribSource;
   const _DayTimes(this.fajr, this.sunrise, this.dhuhr, this.asr,
-      this.sunset, this.maghrib, this.isha, this.fajrSource, this.ishaSource);
+      this.sunset, this.maghrib, this.isha, this.fajrSource, this.ishaSource,
+      this.maghribSource);
 
   List<DateTime> get ordered => [fajr, sunrise, dhuhr, asr, maghrib, isha];
 
   _DayTimes shift(Duration offset) => _DayTimes(
       fajr.add(offset), sunrise.add(offset), dhuhr.add(offset), asr.add(offset),
       sunset.add(offset), maghrib.add(offset), isha.add(offset),
-      fajrSource, ishaSource);
+      fajrSource, ishaSource, maghribSource);
 
   _DayTimes adjust(CalculationParameters p) {
     final a = p.adjustments;
@@ -201,7 +204,7 @@ final class _DayTimes {
         apply(sunset, 0),
         apply(maghrib, a.maghrib + m.maghrib),
         apply(isha, a.isha + m.isha),
-        fajrSource, ishaSource);
+        fajrSource, ishaSource, maghribSource);
   }
 }
 
@@ -209,7 +212,8 @@ DateTime? _at(DateTime date, double hours) =>
     TimeComponents.fromDouble(hours)?.dateComponents(date);
 
 DateTime _addSeconds(DateTime time, double seconds) =>
-    time.add(Duration(milliseconds: (seconds * 1000).truncate()));
+    DateTime.fromMillisecondsSinceEpoch(
+        (time.millisecondsSinceEpoch + seconds * 1000).truncate(), isUtc: true);
 
 _DayTimes? _computeDay(Coordinates coordinates, DateTime date,
     CalculationParameters p) {
@@ -278,15 +282,18 @@ _DayTimes? _computeDay(Coordinates coordinates, DateTime date,
   }
 
   var maghrib = sunset;
+  var maghribSource = PrayerTimeSource.astronomical;
   if (p.maghribAngle > 0) {
     final angleTime = _at(date, solar.hourAngle(-p.maghribAngle, true));
     if (angleTime != null && angleTime.isAfter(sunset) && angleTime.isBefore(isha)) {
       maghrib = angleTime;
+    } else {
+      maghribSource = PrayerTimeSource.sunsetFallback;
     }
   }
 
   final result = _DayTimes(fajr, sunrise, dhuhr, asr, sunset, maghrib, isha,
-      fajrSource, ishaSource);
+      fajrSource, ishaSource, maghribSource);
   return _ordered(result.ordered) ? result : null;
 }
 

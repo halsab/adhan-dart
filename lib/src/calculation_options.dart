@@ -25,6 +25,7 @@ enum PrayerTimeSource {
   nightPortion,
   seasonalTwilight,
   fixedInterval,
+  sunsetFallback,
 }
 
 /// A calculation failure, distinct from invalid caller input.

@@ -1,3 +1,16 @@
+## 3.0.0-dev.1
+
+Development release; not yet validated.
+
+- Port converged solar-angle solver, solar-transit Asr, date-line handling,
+  horizon elevation, polar fallback and Shafaq.
+- Return UTC instants exclusively; validate civil dates and coordinates.
+- Add immutable calculation settings, rounding modes, provenance, typed
+  calculation failures, night milestones and optional extended timeline.
+- Update SDK and dev dependencies; remove outdated Flutter sample.
+- Add published fixtures, global stress test, native/browser/Wasm CI and
+  pinned JS reference comparison. Verification must complete before release.
+
 ## 2.0.0+1
 
 - chore: update readme.

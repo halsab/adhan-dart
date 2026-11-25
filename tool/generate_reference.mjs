@@ -58,9 +58,14 @@ for (const [lat, lon] of locations) {
             if (order.every((key, i) => i === 0 || times[key] > times[order[i-1]])) {
               record.times = Object.fromEntries(events.map(k => [k, +times[k]]));
               const n = new SunnahTimes(times);
-              if (n.isValid && n.middleOfTheNight > times.maghrib &&
+              const nextDate = new Date(date + 'T00:00:00Z');
+              nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+              const next = new PrayerTimes(c, nextDate, p);
+              if (n.isValid && next.isValid && next.fajr > times.isha &&
+                  next.fajr - times.maghrib < 86400000 &&
+                  n.middleOfTheNight > times.maghrib &&
                   n.lastThirdOfTheNight > n.middleOfTheNight &&
-                  n.lastThirdOfTheNight - times.maghrib < 86400000) {
+                  next.fajr > n.lastThirdOfTheNight) {
                 record.sunnah = { middle: +n.middleOfTheNight, lastThird: +n.lastThirdOfTheNight };
               }
             }

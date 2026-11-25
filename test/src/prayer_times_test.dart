@@ -132,6 +132,18 @@ void main() {
     expect(tehran.maghrib.isAfter(tehran.sunset), isTrue);
   });
 
+  test('fixed interval, sunset fallback and rounding preserve their conventions', () {
+    final params = CalculationMethod.umm_al_qura.getParameters()
+        .copyWith(rounding: Rounding.none);
+    final p = PrayerTimes(coords, date, params);
+    expect(p.isha.difference(p.sunset), const Duration(minutes: 90));
+    expect(p.ishaSource, PrayerTimeSource.fixedInterval);
+    final fallback = PrayerTimes(coords, date, params.copyWith(maghribAngle: 90));
+    expect(fallback.maghrib, fallback.sunset);
+    expect(fallback.maghribSource, PrayerTimeSource.sunsetFallback);
+    expect(fallback.isApproximate, isTrue);
+  });
+
   test('season day and leap year boundaries', () {
     expect(PrayerTimes.daysSinceSolstice(1, 2016, 1), 11);
     expect(PrayerTimes.daysSinceSolstice(366, 2016, 1), 10);
