@@ -1,41 +1,33 @@
-// @dart=2.9
-
 import 'package:adhan/adhan.dart';
-import 'package:dart_numerics/dart_numerics.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('Test CalculationMethod Equality Support', () {
-    final karachiMethod1 = CalculationMethod.karachi;
-    final karachiMethod2 = CalculationMethod.karachi;
-    final egyptianMethod1 = CalculationMethod.egyptian;
-
-    expect(karachiMethod1 == karachiMethod2, isTrue);
-    expect(karachiMethod1 == egyptianMethod1, isFalse);
-  });
-
-  test('Test CalculationMethod.getParameters', () {
-    CalculationParameters params;
-
-    params = CalculationMethod.muslim_world_league.getParameters();
-    expect(almostEqualD(params.fajrAngle, 18, 0.000001), isTrue);
-    expect(almostEqualD(params.ishaAngle, 17, 0.000001), isTrue);
-    expect(params.ishaInterval, 0);
-    expect(params.method, CalculationMethod.muslim_world_league);
-
-    params = CalculationMethod.egyptian.getParameters();
-    expect(almostEqualD(params.fajrAngle, 19.5, 0.000001), isTrue);
-    expect(almostEqualD(params.ishaAngle, 17.5, 0.000001), isTrue);
-    expect(params.ishaInterval, 0);
-    expect(params.method, CalculationMethod.egyptian);
-
-    params = CalculationMethod.other.getParameters();
-    expect(almostEqualD(params.fajrAngle, 0, 0.000001), isTrue);
-    expect(almostEqualD(params.ishaAngle, 0, 0.000001), isTrue);
-    expect(params.ishaInterval, 0);
-    expect(params.method, CalculationMethod.other);
-
-    CalculationMethod calculationMethod;
-    expect(() => calculationMethod.getParameters(), throwsFormatException);
+  test('all method presets retain their identity and published parameters', () {
+    final expected = <CalculationMethod, (double, double, int)>{
+      CalculationMethod.muslim_world_league: (18, 17, 0),
+      CalculationMethod.egyptian: (19.5, 17.5, 0),
+      CalculationMethod.karachi: (18, 18, 0),
+      CalculationMethod.umm_al_qura: (18.5, 0, 90),
+      CalculationMethod.dubai: (18.2, 18.2, 0),
+      CalculationMethod.moon_sighting_committee: (18, 18, 0),
+      CalculationMethod.north_america: (15, 15, 0),
+      CalculationMethod.kuwait: (18, 17.5, 0),
+      CalculationMethod.qatar: (18, 0, 90),
+      CalculationMethod.singapore: (20, 18, 0),
+      CalculationMethod.turkey: (18, 17, 0),
+      CalculationMethod.tehran: (17.7, 14, 0),
+      CalculationMethod.other: (0, 0, 0),
+    };
+    expect(expected.length, CalculationMethod.values.length);
+    for (final entry in expected.entries) {
+      final p = entry.key.getParameters();
+      expect(p.method, entry.key);
+      expect((p.fajrAngle, p.ishaAngle, p.ishaInterval), entry.value);
+      expect(p.polarCircleResolution, PolarCircleResolution.aqrabBalad);
+    }
+    expect(CalculationMethod.singapore.getParameters().rounding, Rounding.up);
+    expect(CalculationMethod.tehran.getParameters().maghribAngle, 4.5);
+    final dubai = CalculationMethod.dubai.getParameters().methodAdjustments;
+    expect((dubai.sunrise, dubai.dhuhr, dubai.asr, dubai.maghrib), (-3, 3, 3, 3));
   });
 }

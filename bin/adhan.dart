@@ -1,41 +1,28 @@
-import 'dart:convert';
-
 import 'dart:io';
-
 import 'package:adhan/adhan.dart';
 
-void main() {
-  print(
-      'Adhan for Dart / Muslim Prayer Times Library. Now retrieving Prayer time in Dart easier than ever.');
-  print('What is your Latitude?');
-  var lat = stdin.readLineSync(encoding: Encoding.getByName('utf-8')!)!;
-  print('What is your Longitude?');
-  var lng = stdin.readLineSync(encoding: Encoding.getByName('utf-8')!)!;
-
-  final coordinates = Coordinates(double.parse(lat), double.parse(lng));
-  final params = CalculationMethod.karachi.getParameters();
-  params.madhab = Madhab.hanafi;
-
-  final prayerTimes = PrayerTimes.today(coordinates, params);
-
-  final hr =
-      '-----------------------------------------------------------------------------------';
-  print(hr);
-  print(
-      "---Today's Prayer Times in Your Local Timezone(${prayerTimes.fajr.timeZoneName})---");
-  print('Fajr: ${prayerTimes.fajr}');
-  print('Sunrise: ${prayerTimes.sunrise}');
-  print('Dhuhr: ${prayerTimes.dhuhr}');
-  print('Asr: ${prayerTimes.asr}');
-  print('Maghrib: ${prayerTimes.maghrib}');
-  print('Isha: ${prayerTimes.isha}');
-
-  final sunnahTimes = SunnahTimes(prayerTimes);
-  print(hr);
-  print('Middle Of The Night: ${sunnahTimes.middleOfTheNight}');
-  print('Last Third Of The Night: ${sunnahTimes.lastThirdOfTheNight}');
-
-  final qibla = Qibla(coordinates);
-  print(hr);
-  print('Qibla: ${qibla.direction}');
+/// The caller supplies the civil date for the target location, not device now.
+void main(List<String> args) {
+  if (args.length != 3) {
+    stderr.writeln('Usage: dart run adhan <latitude> <longitude> <YYYY-MM-DD>');
+    exitCode = 64;
+    return;
+  }
+  try {
+    final coordinates = Coordinates(double.parse(args[0]), double.parse(args[1]));
+    final dateParts = args[2].split('-');
+    if (dateParts.length != 3) throw const FormatException('Expected YYYY-MM-DD');
+    final date = DateComponents(int.parse(dateParts[0]), int.parse(dateParts[1]),
+        int.parse(dateParts[2]));
+    final times = PrayerTimes(coordinates, date,
+        CalculationMethod.karachi.getParameters().copyWith(madhab: Madhab.hanafi));
+    for (final event in PrayerSchedule(times).events) {
+      stdout.writeln('${event.kind.name}: ${event.time.toIso8601String()}');
+    }
+    stdout.writeln('Qibla: ${Qibla(coordinates).direction}° true north');
+    if (times.isApproximate) stdout.writeln('Uses approximated times');
+  } on Object catch (error) {
+    stderr.writeln(error);
+    exitCode = 1;
+  }
 }

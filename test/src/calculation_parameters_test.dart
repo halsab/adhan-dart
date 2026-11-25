@@ -1,33 +1,41 @@
-// @dart=2.9
-
 import 'package:adhan/adhan.dart';
-import 'package:dart_numerics/dart_numerics.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('Test CalculationParameters.nightPortions', () {
-    CalculationParameters parameters;
+  test('night portions and symmetric recommendation', () {
+    final parameters = CalculationParameters(fajrAngle: 10, ishaAngle: 15);
+    expect(parameters.nightPortions(), (fajr: 0.5, isha: 0.5));
+    expect(parameters.copyWith(highLatitudeRule: HighLatitudeRule.seventh_of_the_night)
+        .nightPortions().fajr, closeTo(1/7, 1e-12));
+    final angle = parameters.copyWith(highLatitudeRule: HighLatitudeRule.twilight_angle)
+        .nightPortions();
+    expect(angle.fajr, closeTo(10/60, 1e-12));
+    expect(angle.isha, closeTo(15/60, 1e-12));
+    final automatic = parameters.copyWith(highLatitudeRule: HighLatitudeRule.automatic);
+    for (final lat in [-49.0, 49.0]) {
+      expect(automatic.nightPortions(Coordinates(lat, 0)).isha, closeTo(1/7, 1e-12));
+    }
+    expect(automatic.nightPortions(Coordinates(48, 0)).isha, 0.5);
+  });
 
-    parameters = CalculationParameters(fajrAngle: 18, ishaAngle: 18);
-    parameters.highLatitudeRule = HighLatitudeRule.middle_of_the_night;
-    expect(almostEqualD(parameters.nightPortions().fajr, 0.5, 0.001), isTrue);
-    expect(almostEqualD(parameters.nightPortions().isha, 0.5, 0.001), isTrue);
+  test('copyWith does not mutate parameters or preset offsets', () {
+    final original = CalculationMethod.karachi.getParameters();
+    final changed = original.copyWith(madhab: Madhab.hanafi,
+        adjustments: original.adjustments.copyWith(fajr: 5));
+    expect(original.madhab, Madhab.shafi);
+    expect(original.adjustments.fajr, 0);
+    expect(changed.madhab, Madhab.hanafi);
+    expect(changed.adjustments.fajr, 5);
+    expect(changed.methodAdjustments.dhuhr, 1);
+    expect(changed.method, original.method);
+  });
 
-    parameters = CalculationParameters(fajrAngle: 18, ishaAngle: 18);
-    parameters.highLatitudeRule = HighLatitudeRule.seventh_of_the_night;
-    expect(almostEqualD(parameters.nightPortions().fajr, 1.0 / 7.0, 0.001),
-        isTrue);
-    expect(almostEqualD(parameters.nightPortions().isha, 1.0 / 7.0, 0.001),
-        isTrue);
-
-    parameters = CalculationParameters(fajrAngle: 10.0, ishaAngle: 15.0);
-    parameters.highLatitudeRule = HighLatitudeRule.twilight_angle;
-    expect(almostEqualD(parameters.nightPortions().fajr, 10.0 / 60.0, 0.001),
-        isTrue);
-    expect(almostEqualD(parameters.nightPortions().isha, 15.0 / 60.0, 0.001),
-        isTrue);
-
-    parameters.highLatitudeRule = null;
-    expect(() => parameters.nightPortions(), throwsFormatException);
+  test('rejects malformed settings', () {
+    expect(() => CalculationParameters(fajrAngle: double.nan), throwsArgumentError);
+    expect(() => CalculationParameters(ishaAngle: -1), throwsArgumentError);
+    expect(() => CalculationParameters(maghribAngle: 91), throwsArgumentError);
+    expect(() => CalculationParameters(ishaInterval: -1), throwsArgumentError);
+    expect(() => CalculationParameters(
+        elevationFromHorizon: const ElevationFromHorizon(double.infinity)), throwsArgumentError);
   });
 }
