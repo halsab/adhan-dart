@@ -46,5 +46,11 @@ final class PrayerSchedule {
   }
 
   /// Remains distinct from optional events such as night milestones.
-  Prayer currentPrayer(DateTime now) => prayers.currentPrayer(now);
+  Prayer currentPrayer(DateTime now) {
+    final night = sunnahTimes;
+    if (night != null && !now.isBefore(night.fajrTomorrow)) {
+      return now.isAtSameMomentAs(night.fajrTomorrow) ? Prayer.fajr : Prayer.none;
+    }
+    return prayers.currentPrayer(now);
+  }
 }

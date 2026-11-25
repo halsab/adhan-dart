@@ -11,3 +11,4 @@ export 'sunnah_times.dart';
 export 'data/date_components.dart';
 export 'calculation_options.dart';
 export 'prayer_schedule.dart';
+export 'serialization.dart';

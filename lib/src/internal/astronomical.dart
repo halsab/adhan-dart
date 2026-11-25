@@ -159,7 +159,7 @@ class Astronomical {
     /* Equation from Astronomical Algorithms page 93 */
     final term1 = sin(radians(phi)) * sin(radians(delta));
     final term2 = cos(radians(phi)) * cos(radians(delta)) * cos(radians(H));
-    return degrees(asin(term1 + term2));
+    return degrees(asin((term1 + term2).clamp(-1.0, 1.0).toDouble()));
   }
 
   /// Return the approximate transite
@@ -171,7 +171,8 @@ class Astronomical {
     /* Equation from page Astronomical Algorithms 102 */
     final Lw = L * -1;
     final m0 = DoubleUtil.normalizeWithBound((alpha2 + Lw - theta0) / 360, 1);
-    final expected = DoubleUtil.normalizeWithBound((12 - L / 15) / 24, 1);
+    // Keep +180 and -180 on their respective signed solar-day boundaries.
+    final expected = (12 - L / 15) / 24;
     if (m0 - expected > 0.5) return m0 - 1;
     if (expected - m0 > 0.5) return m0 + 1;
     return m0;

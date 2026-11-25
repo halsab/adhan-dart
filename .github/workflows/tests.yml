@@ -1,28 +1,74 @@
-name: tests
+name: Dart verification
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ master ]
+    branches: [master, 'modernize/**']
   pull_request:
-    branches: [ master ]
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  native:
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        timezone: [UTC, America/New_York, Pacific/Auckland]
+    env:
+      TZ: ${{ matrix.timezone }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: dart-lang/setup-dart@v1
-      with:
-        sdk: '2.19'  # Last stable Dart 2.x version
-    - name: Install dependencies
-      run: dart pub get
-    - name: Run test with coverage 
-      run: dart test --coverage coverage
-    - name: Generate lcov.info for test coverage
-      run: dart pub global activate coverage && dart pub global run coverage:format_coverage -i coverage/test -o coverage/lcov.info --lcov
-    - name: upload reports to codecov
-      run: curl -s https://codecov.io/bash | bash
-      env:
-        CODECOV_TOKEN: '${{ secrets.CODECOV_TOKEN }}'
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart --version
+      - run: dart pub get
+      - run: dart analyze
+      - run: dart test test/src test/shared_times_test.dart
+      - if: matrix.timezone == 'UTC'
+        run: dart test test/stress_test.dart
+      - if: matrix.timezone == 'UTC'
+        run: dart compile exe example/adhan_example.dart -o /tmp/adhan-smoke
+      - if: matrix.timezone == 'UTC'
+        run: /tmp/adhan-smoke
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      - run: dart test -p chrome --compiler dart2js test/src
+      - run: dart test -p chrome --compiler dart2wasm test/src
+      - run: dart compile js example/adhan_example.dart -o /tmp/adhan.js
+      - run: dart compile wasm example/adhan_example.dart -o /tmp/adhan.wasm
+
+  reference:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - uses: actions/checkout@v4
+        with:
+          repository: batoulapps/adhan-js
+          ref: d2993d56fac7d8a06abba4837347bd3fc9cbd188
+          path: .reference/adhan-js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: .reference/adhan-js
+      - run: npm run build:esm
+        working-directory: .reference/adhan-js
+      - run: node tool/generate_reference.mjs /tmp/reference-results.json
+      - run: dart pub get
+      - run: dart run tool/verify_reference.dart /tmp/reference-results.json

@@ -42,6 +42,14 @@ final class CalculationParameters {
     if (ishaInterval < 0 || ishaInterval >= 1440) {
       throw ArgumentError.value(ishaInterval, 'ishaInterval', 'Expected 0..1439 minutes');
     }
+    for (final offset in [adjustments, methodAdjustments]) {
+      for (final minutes in [offset.fajr, offset.sunrise, offset.dhuhr,
+          offset.asr, offset.maghrib, offset.isha]) {
+        if (minutes < -1440 || minutes > 1440) {
+          throw ArgumentError.value(minutes, 'adjustment', 'Expected -1440..1440 minutes');
+        }
+      }
+    }
     if (!elevationFromHorizon.sunrise.isFinite ||
         !elevationFromHorizon.sunset.isFinite) {
       throw ArgumentError('Horizon elevation must be finite');

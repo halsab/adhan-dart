@@ -12,6 +12,11 @@ final class SunnahTimes {
       this.fajrTomorrow, this.nextDayPrayerTimes);
 
   factory SunnahTimes(PrayerTimes today) {
+    if (today.dateComponents.year == 9999 && today.dateComponents.month == 12 &&
+        today.dateComponents.day == 31) {
+      throw const PrayerTimeCalculationException(
+          CalculationFailure.invalidNight, 'Following date outside supported range');
+    }
     final tomorrow = PrayerTimes(today.coordinates,
         today.dateComponents.addDays(1), today.calculationParameters);
     final night = tomorrow.fajr.difference(today.maghrib);

@@ -53,7 +53,7 @@ void main() {
   });
 
   test('date line UTC instants keep the intended solar day', () {
-    for (final lon in [-179.9, 179.9]) {
+    for (final lon in [-180.0, -179.9, 179.9, 180.0]) {
       final p = PrayerTimes(Coordinates(0, lon), DateComponents(2026, 3, 20),
           CalculationMethod.muslim_world_league.getParameters());
       expectOrdered(p);
