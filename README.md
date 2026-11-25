@@ -34,7 +34,11 @@ final night = SunnahTimes.tryCalculate(times);
 final schedule = PrayerSchedule(times);
 ```
 
-Use `DateComponents.from(targetLocalDateTime)` or explicit year/month/day.
+For ordinary locations use `DateComponents.from(targetLocalDateTime)` or explicit year/month/day.
+For global calendar correctness, map the instant of civil noon in the target IANA
+zone using `DateComponents.fromLocalNoon(localNoon, coordinates)`. This handles
+political timezones across the International Date Line, including Samoa and
+Kiritimati. Keep the requested civil date separately as the UI label.
 **Never add a UTC offset to a prayer time and then treat it as an absolute
 instant.** A device's local timezone can differ from the target location.
 An app can use an IANA timezone database (for example, the Dart timezone
@@ -127,8 +131,9 @@ dart test -p chrome --compiler dart2wasm test/src
 ```
 
 The GitHub Actions workflow additionally generates reference schedules from
-the pinned Adhan JS commit and compares them with Dart. The library uses no
-JavaScript at runtime; Node is needed only for this development check.
+the pinned Adhan JS commit and compares them with Dart, executes direct Swift
+and Kotlin differential checks, and benchmarks raw solar geometry against JPL
+DE440s. None of those tools or datasets is a runtime dependency.
 
 ## License
 

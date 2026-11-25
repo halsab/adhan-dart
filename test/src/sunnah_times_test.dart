@@ -2,6 +2,23 @@ import 'package:adhan/adhan.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('night fails explicitly when polar next-day adjusted events collide', () {
+    final coordinates = Coordinates(-78, 15);
+    final date = DateComponents(2025, 4, 26);
+    final p = CalculationMethod.moon_sighting_committee.getParameters().copyWith(
+        highLatitudeRule: HighLatitudeRule.seventh_of_the_night,
+        polarCircleResolution: PolarCircleResolution.aqrabBalad,
+        shafaq: Shafaq.ahmer,
+        elevationFromHorizon: const ElevationFromHorizon(450));
+    final today = PrayerTimes(coordinates, date, p);
+    expect(today.usedPolarResolution, isTrue);
+    expect(() => PrayerTimes(coordinates, date.addDays(1), p),
+        throwsA(isA<PrayerTimeCalculationException>().having(
+            (e) => e.reason, 'reason', CalculationFailure.invalidAdjustments)));
+    expect(SunnahTimes.tryCalculate(today), isNull);
+    expect(PrayerSchedule(today).sunnahTimes, isNull);
+  });
+
   test('night milestones use the actual next-day Fajr and preserve UTC', () {
     final coordinates = Coordinates(35.775, -78.6336);
     final date = DateComponents(2015, 7, 12);

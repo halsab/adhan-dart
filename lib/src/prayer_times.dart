@@ -12,8 +12,9 @@ import 'madhab.dart';
 import 'prayer.dart';
 
 /// One complete daily schedule. All times are absolute UTC instants.
-/// A civil date belongs to the target location; timezone presentation is the
-/// caller's responsibility. No device timezone is used during calculation.
+/// The date identifies a nominal solar day at the longitude. Use
+/// DateComponents.fromLocalNoon for civil dates across political date-line
+/// boundaries. Timezone lookup/presentation is the caller's responsibility.
 final class PrayerTimes {
   final Coordinates coordinates;
   final DateComponents dateComponents;
@@ -112,7 +113,9 @@ final class PrayerTimes {
   factory PrayerTimes.utc(Coordinates coordinates, DateComponents date,
       CalculationParameters parameters) => PrayerTimes(coordinates, date, parameters);
 
-  /// Convenience constructor using explicitly supplied target-local date fields.
+  /// Convenience for target-local dates aligned with the longitude's solar
+  /// date. For date-line exceptions use the primary constructor with
+  /// DateComponents.fromLocalNoon.
   factory PrayerTimes.today(Coordinates coordinates, CalculationParameters parameters,
       {required DateTime localNow}) =>
       PrayerTimes(coordinates, DateComponents.from(localNow), parameters);

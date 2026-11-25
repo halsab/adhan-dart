@@ -39,6 +39,8 @@ new Codeberg repository has not been checked.
 
 1. Use UTC DateTime instants and a separately validated civil date. Never shift
    a UTC instant to fake another timezone. The host app owns timezone mapping.
+   The local-noon anchor helper maps a civil date to the longitude's nominal
+   solar day across political date-line boundaries.
 2. Keep JS default high-latitude rule and northern Moonsighting Committee
    >=55° special case. Automatic symmetric selection is opt-in. A broader
    change to the Moonsighting Committee rule requires methodological evidence.
@@ -77,7 +79,9 @@ new Codeberg repository has not been checked.
 - Direct Swift comparison: run the pinned Swift implementation on all 6,552
   unrounded combinations (14 locations, 6 dates, 13 methods, 2 madhabs,
   3 policy variants). Check valid/invalid schedules, night milestones and
-  Qibla; use a one-second limit on absolute instants.
+  Qibla; use a one-second limit on prayer instants and a two-second bound
+  on night milestones because Swift truncates both input event fractions and
+  the final milestone to whole seconds. Also compare next-day Fajr directly.
 - Direct Kotlin comparison: restrict the same input matrix to the 1,296
   common-feature scenarios at |latitude| <=40°, no polar substitution,
   no elevation and no Tehran. The old solver and 0h-UT Asr declination

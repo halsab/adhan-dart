@@ -1,4 +1,8 @@
-/// A Gregorian civil date at the target location, independent of device zone.
+import '../coordinates.dart';
+
+/// Gregorian date of a nominal solar cycle at the requested longitude.
+/// Usually the target civil date; use [DateComponents.fromLocalNoon] when
+/// political timezones can put the civil date on the other side of the date line.
 /// Supported years: 1..9999. This is not an instant.
 final class DateComponents {
   final int year, month, day;
@@ -15,6 +19,17 @@ final class DateComponents {
   /// Reads the date fields as supplied. Convert to the target zone first.
   factory DateComponents.from(DateTime date) =>
       DateComponents(date.year, date.month, date.day);
+
+  /// Maps an actual instant of target-local civil noon to the solar date.
+  ///
+  /// Use the location's IANA timezone to construct local noon first. This
+  /// handles civil timezones whose date differs from the nominal solar date
+  /// (e.g. Samoa or Kiritimati) without adding a timezone database dependency.
+  /// Keep the requested civil date separately in the host application's UI.
+  factory DateComponents.fromLocalNoon(DateTime localNoon, Coordinates coordinates) {
+    final longitudeOffset = Duration(milliseconds: (coordinates.longitude * 240000).round());
+    return DateComponents.from(localNoon.toUtc().add(longitudeOffset));
+  }
 
   DateTime toUtcMidnight() => DateTime.utc(year, month, day);
 

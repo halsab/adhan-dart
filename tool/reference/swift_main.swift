@@ -8,6 +8,8 @@ struct Scenario: Decodable {
     let east: Double, west: Double, fajrAngle: Double, ishaAngle: Double
     let times: [Int64]?, night: [Int64]?
     let qibla: Double
+    let calculationLatitude: Double?, calculationDate: String?
+    let nextFajr: Int64?
 }
 func normalized(_ s: String) -> String { s.replacingOccurrences(of: "_", with: "").lowercased() }
 func ordered(_ t: PrayerTimes) -> [Date]? {
@@ -18,6 +20,8 @@ let rows = try JSONDecoder().decode([Scenario].self, from: Data(contentsOf: URL(
 var failures = 0
 var comparisons = 0
 var maxError: Double = 0
+var failuresByKind: [String: Int] = [:]
+var largeFailures = 0
 for row in rows {
     let coordinates = Coordinates(latitude: row.lat, longitude: row.lon)
     let date = DateComponents(year: row.year, month: row.month, day: row.day)
@@ -30,16 +34,24 @@ for row in rows {
     params.elevationFromHorizon = ElevationFromHorizon(sunrise: row.east, sunset: row.west)
     params.fajrAngle = row.fajrAngle
     params.ishaAngle = row.ishaAngle
-    func fail(_ message: String) {
+    func fail(_ message: String, kind: String = "other", large: Bool = true) {
         failures += 1
-        if failures <= 30 { print("\(row.year)-\(row.month)-\(row.day) \(row.lat),\(row.lon) \(row.method)/\(row.madhab)/\(row.polar): \(message)") }
+        failuresByKind[kind, default: 0] += 1
+        if large { largeFailures += 1 }
+        if failures <= 10 || (large && largeFailures <= 40) { print("\(row.year)-\(row.month)-\(row.day) \(row.lat),\(row.lon) \(row.method)/\(row.madhab)/\(row.polar): \(message)") }
     }
     func compare(_ actual: [Date], _ expected: [Int64], _ name: String) {
         for (index, pair) in zip(actual, expected).enumerated() {
             let delta = abs(pair.0.timeIntervalSince1970 * 1000 - Double(pair.1))
             comparisons += 1
             maxError = max(maxError, delta)
-            if delta > 1000 { fail("\(name)[\(index)] delta \(delta)ms") }
+            // Swift .none reconstructs Date from integer-second components;
+            // its night milestones are then also floored. A 1 s endpoint
+            // difference plus at most 1 s final truncation bounds this effect.
+            let limit: Double = name == "night" ? 2000 : 1000
+            if delta > limit {
+                fail("\(name)[\(index)] delta \(delta)ms, Swift=\(pair.0), Dart=\(Date(timeIntervalSince1970: Double(pair.1)/1000)), Dart geometry=\(String(describing: row.calculationLatitude)),\(String(describing: row.calculationDate))", kind: name, large: delta > 2000)
+            }
         }
     }
     let direction = Qibla(coordinates: coordinates).direction
@@ -62,9 +74,16 @@ for row in rows {
        night.lastThirdOfTheNight > night.middleOfTheNight,
        next.fajr > night.lastThirdOfTheNight {
         actualNight = [night.middleOfTheNight, night.lastThirdOfTheNight]
+        if let expectedNext = row.nextFajr {
+            let nextDelta = abs(next.fajr.timeIntervalSince1970 * 1000 - Double(expectedNext))
+            if nextDelta > 1000 {
+                fail("next Fajr delta \(nextDelta)ms, Swift=\(next.fajr), Dart=\(Date(timeIntervalSince1970: Double(expectedNext)/1000))", kind: "nextFajr", large: nextDelta > 2000)
+            }
+        }
     }
     if (actualNight == nil) != (row.night == nil) { fail("night validity mismatch") }
     if let actualNight, let expectedNight = row.night { compare(actualNight, expectedNight, "night") }
 }
+print("Failure categories: \(failuresByKind)")
 print("Swift: \(rows.count) scenarios, \(comparisons) instant comparisons, max error \(maxError) ms, \(failures) mismatches")
 if failures > 0 { exit(1) }

@@ -101,16 +101,19 @@ jobs:
           swiftc -O $(find .reference/adhan-swift/Sources -name '*.swift' | sort) "$RUNNER_TEMP/main.swift" -o "$RUNNER_TEMP/swift-parity"
           "$RUNNER_TEMP/swift-parity" "$RUNNER_TEMP/cross-port.json"
       - uses: actions/checkout@v7.0.1
+        if: always() && !cancelled()
         with:
           repository: batoulapps/adhan-kotlin
           ref: a39517d0aafb95addef28956d96e5823b3aea1cc
           path: .reference/adhan-kotlin
           persist-credentials: false
       - uses: actions/setup-java@v6.3.0
+        if: always() && !cancelled()
         with:
           java-version: '21'
           distribution: zulu
       - name: Direct Kotlin comparison
+        if: always() && !cancelled()
         run: |
           cp tool/reference/KotlinParityTest.kt .reference/adhan-kotlin/adhan/src/jvmTest/kotlin/com/batoulapps/adhan2/
           cd .reference/adhan-kotlin

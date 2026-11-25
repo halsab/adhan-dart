@@ -64,6 +64,9 @@ void main(List<String> args) {
               'night': night == null ? null : [night.middleOfTheNight,
                   night.lastThirdOfTheNight].map((t) => t.millisecondsSinceEpoch).toList(),
               'qibla': Qibla(location).direction,
+              'calculationLatitude': times?.calculationCoordinates.latitude,
+              'calculationDate': times?.calculationDate.toString(),
+              'nextFajr': night?.fajrTomorrow.millisecondsSinceEpoch,
             });
           }
         }
