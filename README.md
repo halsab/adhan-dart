@@ -75,6 +75,16 @@ value is zero. Negative values are treated as zero.
 
 - `PrayerTimes` contains Fajr, sunrise, Dhuhr, Asr, physical sunset, Maghrib,
   and Isha as UTC DateTime values.
+- `astronomicalFajr` and `astronomicalIsha` are independent nullable UTC
+  instants of the configured morning/evening angle crossings. Each is null
+  when its angle is unreachable, even if a final prayer time is available.
+  They are captured before night-portion limits, seasonal substitutions,
+  fixed Isha intervals, adjustments and minute rounding. The Isha angle
+  is evaluated even when `ishaInterval` determines the final Isha.
+  After polar resolution they describe the geometry of
+  `calculationCoordinates` and `calculationDate`; Aqrab Yaum shifts them
+  to the requested solar date using the same whole-day offset as the
+  final schedule. The existing final times and source flags are unchanged.
 - `fajrSource`, `ishaSource`, `maghribSource`, `calculationCoordinates`,
   `calculationDate`, and `appliedPolarResolution` describe calculation
   substitutions. `isApproximate` flags twilight/angle and polar substitutions.
