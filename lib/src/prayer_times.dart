@@ -33,6 +33,27 @@ final class PrayerTimes {
   DateTime get sunset => _times.sunset;
   DateTime get maghrib => _times.maghrib;
   DateTime get isha => _times.isha;
+
+  /// The morning crossing of the configured Fajr angle, as a UTC instant,
+  /// or null if the angle is unreachable. Independent of [astronomicalIsha].
+  ///
+  /// Before night-portion limits, seasonal substitutions, adjustments and
+  /// minute rounding. Uses [calculationCoordinates] and [calculationDate]
+  /// after polar resolution. For Aqrab Yaum, the instant is shifted by the
+  /// same whole-day offset as the final schedule to [dateComponents].
+  DateTime? get astronomicalFajr => _times.astronomicalFajr;
+
+  /// The evening crossing of the configured Isha angle, as a UTC instant,
+  /// or null if the angle is unreachable. Independent of [astronomicalFajr].
+  ///
+  /// Before night-portion limits, seasonal substitutions, fixed Isha
+  /// intervals, adjustments and minute rounding. The configured angle is
+  /// evaluated even when a fixed interval determines [isha].
+  /// Uses [calculationCoordinates] and [calculationDate] after polar resolution.
+  /// For Aqrab Yaum, the instant is shifted by the same whole-day offset
+  /// as the final schedule to [dateComponents].
+  DateTime? get astronomicalIsha => _times.astronomicalIsha;
+
   PrayerTimeSource get fajrSource => _times.fajrSource;
   PrayerTimeSource get ishaSource => _times.ishaSource;
   PrayerTimeSource get maghribSource => _times.maghribSource;
@@ -183,16 +204,18 @@ bool _ordered(List<DateTime> times,
 final class _DayTimes {
   final DateTime fajr, sunrise, dhuhr, asr, sunset, maghrib, isha;
   final PrayerTimeSource fajrSource, ishaSource, maghribSource;
+  final DateTime? astronomicalFajr, astronomicalIsha;
   const _DayTimes(this.fajr, this.sunrise, this.dhuhr, this.asr,
       this.sunset, this.maghrib, this.isha, this.fajrSource, this.ishaSource,
-      this.maghribSource);
+      this.maghribSource, this.astronomicalFajr, this.astronomicalIsha);
 
   List<DateTime> get ordered => [fajr, sunrise, dhuhr, asr, maghrib, isha];
 
   _DayTimes shift(Duration offset) => _DayTimes(
       fajr.add(offset), sunrise.add(offset), dhuhr.add(offset), asr.add(offset),
       sunset.add(offset), maghrib.add(offset), isha.add(offset),
-      fajrSource, ishaSource, maghribSource);
+      fajrSource, ishaSource, maghribSource,
+      astronomicalFajr?.add(offset), astronomicalIsha?.add(offset));
 
   _DayTimes adjust(CalculationParameters p) {
     final a = p.adjustments;
@@ -207,7 +230,8 @@ final class _DayTimes {
         apply(sunset, 0),
         apply(maghrib, a.maghrib + m.maghrib),
         apply(isha, a.isha + m.isha),
-        fajrSource, ishaSource, maghribSource);
+        fajrSource, ishaSource, maghribSource,
+        astronomicalFajr, astronomicalIsha);
   }
 }
 
@@ -247,7 +271,9 @@ _DayTimes? _computeDay(Coordinates coordinates, DateTime date,
   final safeSource = moonsighting
       ? PrayerTimeSource.seasonalTwilight : PrayerTimeSource.nightPortion;
 
-  var fajr = _at(date, solar.hourAngle(-p.fajrAngle, false));
+  final astronomicalFajr = _at(date, solar.hourAngle(-p.fajrAngle, false));
+  final astronomicalIsha = _at(date, solar.hourAngle(-p.ishaAngle, true));
+  var fajr = astronomicalFajr;
   var fajrSource = PrayerTimeSource.astronomical;
   if (special) {
     fajr = _addSeconds(sunrise, -night / 7);
@@ -269,7 +295,7 @@ _DayTimes? _computeDay(Coordinates coordinates, DateTime date,
     isha = sunset.add(Duration(minutes: p.ishaInterval));
     ishaSource = PrayerTimeSource.fixedInterval;
   } else {
-    isha = _at(date, solar.hourAngle(-p.ishaAngle, true));
+    isha = astronomicalIsha;
     if (special) {
       isha = _addSeconds(sunset, night / 7);
       ishaSource = PrayerTimeSource.nightPortion;
@@ -296,7 +322,8 @@ _DayTimes? _computeDay(Coordinates coordinates, DateTime date,
   }
 
   final result = _DayTimes(fajr, sunrise, dhuhr, asr, sunset, maghrib, isha,
-      fajrSource, ishaSource, maghribSource);
+      fajrSource, ishaSource, maghribSource,
+      astronomicalFajr, astronomicalIsha);
   return _ordered(result.ordered) ? result : null;
 }
 
